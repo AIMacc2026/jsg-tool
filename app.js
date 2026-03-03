@@ -409,6 +409,7 @@ const signup = async () => {
 
   if (loginBtn) loginBtn.addEventListener("click", login);
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
+  if (signupBtn) signupBtn.addEventListener("click", signup);
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
   if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
 
