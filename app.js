@@ -55,7 +55,42 @@ try {
   const password = el("password");
   const loginBtn = el("loginBtn");
   const authMsg = el("authMsg");
+  const signupBtn = el("signupBtn");
+const signup = async () => {
+  try {
+    setMsg(authMsg, "Registrierung läuft…", true);
+    if (signupBtn) {
+      signupBtn.disabled = true;
+      signupBtn.textContent = "Lädt…";
+    }
 
+    const em = email.value.trim();
+    const pw = password.value;
+
+    if (!em) { setMsg(authMsg, "E-Mail fehlt.", false); return; }
+    if (!pw) { setMsg(authMsg, "Passwort fehlt.", false); return; }
+
+    const { error } = await supabase.auth.signUp({
+      email: em,
+      password: pw,
+      options: { data: { name_anzeige: em.split("@")[0] } }
+    });
+
+    if (error) {
+      setMsg(authMsg, error.message || "Registrieren fehlgeschlagen.", false);
+      return;
+    }
+
+    setMsg(authMsg, "Konto erstellt. Warte auf Freischaltung durch Admin.", true);
+    if (password) password.value = "";
+  } finally {
+    if (signupBtn) {
+      signupBtn.disabled = false;
+      signupBtn.textContent = "Registrieren";
+    }
+  }
+};
+  
   const datum = el("datum");
   const teamSelect = el("teamSelect");
   const playerSelect = el("playerSelect");
@@ -373,4 +408,19 @@ try {
 
   supabase.auth.onAuthStateChange(() => setSessionUI());
   setSessionUI();
+  // --- EVENT BINDINGS (required) ---
+if (loginBtn) loginBtn.onclick = login;
+if (signupBtn) signupBtn.onclick = signup;
+if (logoutBtn) logoutBtn.onclick = logout;
+if (saveBtn) saveBtn.onclick = saveEntry;
+if (nextBtn) nextBtn.onclick = nextPlayer;
+
+if (teamSelect) teamSelect.onchange = () => loadPlayersForTeam(teamSelect.value);
+if (flagSelect) flagSelect.onchange = updateFlagUI;
+
+if (attJa) attJa.onclick = () => { state.anwesenheit = true; updateAttendanceUI(); };
+if (attNein) attNein.onclick = () => { state.anwesenheit = false; updateAttendanceUI(); };
+
+if (excJa) excJa.onclick = () => { state.abgemeldet = true; updateExcusedUI(); };
+if (excNein) excNein.onclick = () => { state.abgemeldet = false; updateExcusedUI(); };
 })();
