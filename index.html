@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JSG Trainings-App</title>
+  <link rel="stylesheet" href="./style.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
+<script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="container">
+
+    <header class="header">
+      <div class="brand">
+        <div class="logo">JSG</div>
+        <div>
+          <div class="title">Trainings-App</div>
+          <div class="subtitle">Eintragen</div>
+        </div>
+      </div>
+      <div class="userbox">
+        <span id="userLabel" class="muted">Nicht angemeldet</span>
+        <button id="logoutBtn" class="btn btn-ghost hidden">Abmelden</button>
+      </div>
+    </header>
+
+    <section id="authSection" class="card">
+      <h2>Anmelden</h2>
+      <div class="grid">
+        <label>
+          E-Mail
+          <input id="email" type="email" autocomplete="email" placeholder="name@mail.de" />
+        </label>
+        <label>
+          Passwort
+          <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
+        </label>
+      </div>
+      <div class="row">
+        <button id="loginBtn" class="btn">Anmelden</button>
+      </div>
+      <div id="authMsg" class="msg"></div>
+    </section>
+
+    <section id="appSection" class="card hidden">
+      <h2>Eintrag</h2>
+
+      <div class="grid">
+        <label>
+          Datum
+          <input id="datum" type="date" />
+        </label>
+
+        <label>
+          Team
+          <select id="teamSelect"></select>
+        </label>
+
+        <label>
+          Spieler
+          <select id="playerSelect"></select>
+        </label>
+
+        <label>
+          Trainingstyp
+          <select id="typSelect"></select>
+        </label>
+      </div>
+
+      <div class="grid grid-2">
+        <label class="inline">
+          <span>Anwesenheit</span>
+          <div class="seg">
+            <button type="button" class="segbtn" data-att="true" id="attJa">Ja</button>
+            <button type="button" class="segbtn" data-att="false" id="attNein">Nein</button>
+          </div>
+        </label>
+
+        <label class="inline" id="abmBox">
+          <span>Abgemeldet</span>
+          <div class="seg">
+            <button type="button" class="segbtn" data-exc="true" id="excJa">Ja</button>
+            <button type="button" class="segbtn" data-exc="false" id="excNein">Nein</button>
+          </div>
+        </label>
+
+        <label id="grundWrap" class="hidden">
+          Grund
+          <select id="grundSelect"></select>
+        </label>
+      </div>
+
+      <div class="grid grid-2">
+        <label>
+          Auffälligkeit
+          <select id="flagSelect">
+            <option value="none">Keine</option>
+            <option value="positive">Positiv</option>
+            <option value="negative">Negativ</option>
+          </select>
+        </label>
+
+        <label id="katWrap" class="hidden">
+          Kategorie
+          <select id="katSelect"></select>
+        </label>
+
+        <label id="sevWrap" class="hidden">
+          Schweregrad (1–5)
+          <select id="sevSelect">
+            <option value="">–</option>
+            <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+          </select>
+        </label>
+
+        <label id="notizWrap" class="hidden">
+          Notiz (max. 10 Wörter)
+          <input id="notiz" type="text" placeholder="optional" />
+        </label>
+      </div>
+
+      <div class="grid grid-2">
+        <label>
+          Readiness (optional)
+          <select id="readySelect">
+            <option value="">–</option>
+            <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+          </select>
+        </label>
+
+        <label>
+          Readiness-Grund (max. 10 Wörter)
+          <input id="readyGrund" type="text" placeholder="optional" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="saveBtn" class="btn">Speichern</button>
+        <button id="nextBtn" class="btn btn-ghost">Nächster Spieler</button>
+      </div>
+
+      <div id="saveMsg" class="msg"></div>
+    </section>
+
+  </div>
+
+</body>
+</html>
