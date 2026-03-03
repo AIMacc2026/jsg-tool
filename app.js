@@ -412,7 +412,7 @@ const signup = async () => {
   if (signupBtn) signupBtn.addEventListener("click", (e) => {
   e.preventDefault();
   e.stopPropagation();
-  alert("SIGNUP HANDLER OK");
+  setMsg(authMsg, "Registrierung startet…", true);
   signup();
 });
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
