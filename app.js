@@ -59,6 +59,8 @@ try {
   
 const signup = async () => {
   try {
+    setMsg(authMsg, "SIGNUP CLICK", true);
+
     setMsg(authMsg, "Registrierung läuft…", true);
     if (signupBtn) {
       signupBtn.disabled = true;
@@ -84,6 +86,9 @@ const signup = async () => {
 
     setMsg(authMsg, "Konto erstellt. Warte auf Freischaltung durch Admin.", true);
     if (password) password.value = "";
+  } catch (e) {
+    setMsg(authMsg, "Registrieren fehlgeschlagen.", false);
+    console.log(e);
   } finally {
     if (signupBtn) {
       signupBtn.disabled = false;
@@ -403,7 +408,6 @@ const signup = async () => {
   if (excNein) excNein.addEventListener("click", () => { state.abgemeldet = false; updateExcusedUI(); });
 
   if (loginBtn) loginBtn.addEventListener("click", login);
-  if (signupBtn) signupBtn.addEventListener("click", signup);
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
   if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
