@@ -80,9 +80,10 @@ const signup = async () => {
     });
 
     if (error) {
-      setMsg(authMsg, error.message || "Registrieren fehlgeschlagen.", false);
-      return;
-    }
+  setMsg(authMsg, `Registrieren fehlgeschlagen: ${error.message}`, false);
+  console.log("SIGNUP ERROR", error);
+  return;
+}
 
     setMsg(authMsg, "Konto erstellt. Warte auf Freischaltung durch Admin.", true);
     if (password) password.value = "";
