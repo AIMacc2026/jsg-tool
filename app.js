@@ -56,6 +56,7 @@ try {
   const loginBtn = el("loginBtn");
   const authMsg = el("authMsg");
   const signupBtn = el("signupBtn");
+  if (signupBtn) signupBtn.onclick = signup;
 const signup = async () => {
   try {
     setMsg(authMsg, "Registrierung läuft…", true);
