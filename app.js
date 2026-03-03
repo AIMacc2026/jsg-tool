@@ -391,36 +391,26 @@ const signup = async () => {
     playerSelect.value = next ? next.id : "";
   };
 
-  teamSelect?.addEventListener("change", () => loadPlayersForTeam(teamSelect.value));
-  attJa?.addEventListener("click", () => { state.anwesenheit = true; updateAttendanceUI(); });
-  attNein?.addEventListener("click", () => { state.anwesenheit = false; updateAttendanceUI(); });
-  excJa?.addEventListener("click", () => { state.abgemeldet = true; updateExcusedUI(); });
-  excNein?.addEventListener("click", () => { state.abgemeldet = false; updateExcusedUI(); });
-  flagSelect?.addEventListener("change", updateFlagUI);
+    // --- EVENT BINDINGS (single source of truth) ---
+  if (teamSelect) teamSelect.addEventListener("change", () => loadPlayersForTeam(teamSelect.value));
+  if (flagSelect) flagSelect.addEventListener("change", updateFlagUI);
 
-  loginBtn?.addEventListener("click", login);
-  logoutBtn?.addEventListener("click", logout);
-  saveBtn?.addEventListener("click", saveEntry);
-  nextBtn?.addEventListener("click", nextPlayer);
+  if (attJa) attJa.addEventListener("click", () => { state.anwesenheit = true; updateAttendanceUI(); });
+  if (attNein) attNein.addEventListener("click", () => { state.anwesenheit = false; updateAttendanceUI(); });
 
+  if (excJa) excJa.addEventListener("click", () => { state.abgemeldet = true; updateExcusedUI(); });
+  if (excNein) excNein.addEventListener("click", () => { state.abgemeldet = false; updateExcusedUI(); });
+
+  if (loginBtn) loginBtn.addEventListener("click", login);
+  if (signupBtn) signupBtn.addEventListener("click", signup);
+  if (logoutBtn) logoutBtn.addEventListener("click", logout);
+  if (saveBtn) saveBtn.addEventListener("click", saveEntry);
+  if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
+
+  // --- INIT (after bindings) ---
   updateAttendanceUI();
   updateFlagUI();
 
   supabase.auth.onAuthStateChange(() => setSessionUI());
   setSessionUI();
-  // --- EVENT BINDINGS (required) ---
-if (loginBtn) loginBtn.onclick = login;
-if (signupBtn) signupBtn.onclick = signup;
-if (logoutBtn) logoutBtn.onclick = logout;
-if (saveBtn) saveBtn.onclick = saveEntry;
-if (nextBtn) nextBtn.onclick = nextPlayer;
-
-if (teamSelect) teamSelect.onchange = () => loadPlayersForTeam(teamSelect.value);
-if (flagSelect) flagSelect.onchange = updateFlagUI;
-
-if (attJa) attJa.onclick = () => { state.anwesenheit = true; updateAttendanceUI(); };
-if (attNein) attNein.onclick = () => { state.anwesenheit = false; updateAttendanceUI(); };
-
-if (excJa) excJa.onclick = () => { state.abgemeldet = true; updateExcusedUI(); };
-if (excNein) excNein.onclick = () => { state.abgemeldet = false; updateExcusedUI(); };
 })();
