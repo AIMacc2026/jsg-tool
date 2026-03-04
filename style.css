@@ -84,3 +84,32 @@ input,select{
   .grid{grid-template-columns:repeat(2,1fr)}
   .grid-2{grid-template-columns:repeat(2,1fr)}
 }
+/* Mobile first: alles untereinander */
+@media (max-width: 720px) {
+  .container { padding: 12px; }
+  .card { padding: 12px; }
+
+  .grid,
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .btn, .btn-ghost {
+    width: 100%;
+  }
+
+  .seg {
+    width: 100%;
+  }
+  .segbtn {
+    flex: 1;
+  }
+}
