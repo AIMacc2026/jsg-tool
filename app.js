@@ -26,7 +26,7 @@
 const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storageKey: STORAGE_KEY,
-    storage: window.sessionStorage,
+    storage: window.localStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false
