@@ -1,6 +1,6 @@
 (() => {
   console.log("APP START");
-  const APP_VERSION = "2026-03-02-01";
+  const APP_VERSION = "1";
   const STORAGE_KEY = `jsg_auth_${APP_VERSION}`;
   window.onerror = (msg, src, line, col) => {
     const t = document.getElementById("authMsg");
