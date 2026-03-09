@@ -54,47 +54,45 @@ try {
   const email = el("email");
   const password = el("password");
   const loginBtn = el("loginBtn");
-  const authMsg = el("authMsg");
   const signupBtn = el("signupBtn");
+  const authMsg = el("authMsg");
+  const inviteCode = el("inviteCode");
   
 const signup = async () => {
+  setMsg(authMsg, "");
+
+  const em = (email?.value || "").trim();
+  const pw = password?.value || "";
+  const code = (inviteCode?.value || "").trim();
+
+  if (!em) return setMsg(authMsg, "E-Mail fehlt.", false);
+  if (!pw) return setMsg(authMsg, "Passwort fehlt.", false);
+  if (!code) return setMsg(authMsg, "Invite-Code fehlt.", false);
+
   try {
-    setMsg(authMsg, "SIGNUP CLICK", true);
-
+    if (signupBtn) { signupBtn.disabled = true; signupBtn.textContent = "Lädt…"; }
     setMsg(authMsg, "Registrierung läuft…", true);
-    if (signupBtn) {
-      signupBtn.disabled = true;
-      signupBtn.textContent = "Lädt…";
-    }
 
-    const em = email.value.trim();
-    const pw = password.value;
-
-    if (!em) { setMsg(authMsg, "E-Mail fehlt.", false); return; }
-    if (!pw) { setMsg(authMsg, "Passwort fehlt.", false); return; }
-
-    const { error } = await supabase.auth.signUp({
-      email: em,
-      password: pw,
-      options: { data: { name_anzeige: em.split("@")[0] } }
+    const res = await fetch("/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: em, password: pw, inviteCode: code })
     });
 
-    if (error) {
-  setMsg(authMsg, `Registrieren fehlgeschlagen: ${error.message}`, false);
-  console.log("SIGNUP ERROR", error);
-  return;
-}
+    const data = await res.json().catch(() => ({}));
 
-    setMsg(authMsg, "Konto erstellt. Warte auf Freischaltung durch Admin.", true);
-    if (password) password.value = "";
-  } catch (e) {
-    setMsg(authMsg, "Registrieren fehlgeschlagen.", false);
-    console.log(e);
-  } finally {
-    if (signupBtn) {
-      signupBtn.disabled = false;
-      signupBtn.textContent = "Registrieren";
+    if (!res.ok || !data.ok) {
+      const msg =
+        data.error === "INVITE_INVALID" ? "Invite-Code ist falsch." :
+        data.error === "MISSING_FIELDS" ? "E-Mail/Passwort fehlt." :
+        "Registrieren fehlgeschlagen.";
+      return setMsg(authMsg, msg, false);
     }
+
+    setMsg(authMsg, "Konto erstellt. Bitte anmelden. Freischaltung durch Admin nötig.", true);
+    if (password) password.value = "";
+  } finally {
+    if (signupBtn) { signupBtn.disabled = false; signupBtn.textContent = "Registrieren"; }
   }
 };
   
@@ -410,12 +408,7 @@ const signup = async () => {
 
   if (loginBtn) loginBtn.addEventListener("click", login);
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
-  if (signupBtn) signupBtn.addEventListener("click", (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  setMsg(authMsg, "Registrierung startet…", true);
-  signup();
-});
+  if (signupBtn) signupBtn.addEventListener("click", signup);
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
   if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
 
