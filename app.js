@@ -53,6 +53,7 @@ try {
 
   const email = el("email");
   const password = el("password");
+  const pwToggle = el("pwToggle");
   const loginBtn = el("loginBtn");
   const signupBtn = el("signupBtn");
   const authMsg = el("authMsg");
@@ -411,6 +412,13 @@ const signup = async () => {
   if (signupBtn) signupBtn.addEventListener("click", signup);
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
   if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
+  if (pwToggle && password) {
+  pwToggle.addEventListener("click", () => {
+    const isPw = password.type === "password";
+    password.type = isPw ? "text" : "password";
+    pwToggle.textContent = isPw ? "🙈" : "👁";
+  });
+}
 
   // --- INIT (after bindings) ---
   updateAttendanceUI();
