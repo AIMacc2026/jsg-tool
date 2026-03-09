@@ -1,5 +1,4 @@
 (() => {
-  console.log("APP START");
   const APP_VERSION = "1";
   const STORAGE_KEY = `jsg_auth_${APP_VERSION}`;
   window.onerror = (msg, src, line, col) => {
@@ -86,8 +85,22 @@ let data = {};
 try { data = raw ? JSON.parse(raw) : {}; } catch (_) {}
 
 if (!res.ok || !data.ok) {
-  const detail = data?.error || data?.message || raw || "no body";
-  return setMsg(authMsg, `Registrieren fehlgeschlagen (${res.status}): ${detail}`, false);
+  const code = (data && (data.error || data.message)) ? (data.error || data.message) : "";
+
+  if (code === "INVITE_INVALID") {
+    return setMsg(authMsg, "Invite-Code ist falsch.", false);
+  }
+  if (code === "MISSING_FIELDS") {
+    return setMsg(authMsg, "E-Mail/Passwort/Invite-Code fehlt.", false);
+  }
+  if (typeof code === "string" && code.toLowerCase().includes("already")) {
+    return setMsg(authMsg, "E-Mail ist bereits registriert.", false);
+  }
+  if (typeof code === "string" && code.toLowerCase().includes("password")) {
+    return setMsg(authMsg, "Passwort erfüllt die Anforderungen nicht.", false);
+  }
+
+  return setMsg(authMsg, "Registrieren fehlgeschlagen.", false);
 }
 
     setMsg(authMsg, "Konto erstellt. Bitte anmelden. Freischaltung durch Admin nötig.", true);
@@ -316,8 +329,8 @@ if (!res.ok || !data.ok) {
       new Promise((_, rej) => setTimeout(() => rej(new Error("signOut timeout")), 1500))
     ]);
   } catch (e) {
-    console.log("LOGOUT (ignored)", e);
-  }
+  // ignored
+}
 
   // finale Absicherung: Session nochmal ziehen und ggf. nochmals Storage killen
   try {
