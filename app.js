@@ -75,20 +75,20 @@ const signup = async () => {
     setMsg(authMsg, "Registrierung läuft…", true);
 
     const res = await fetch("/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: em, password: pw, inviteCode: code })
-    });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ email: em, password: pw, inviteCode: code })
+});
 
-    const data = await res.json().catch(() => ({}));
+// robust: JSON oder Text
+const raw = await res.text();
+let data = {};
+try { data = raw ? JSON.parse(raw) : {}; } catch (_) {}
 
-    if (!res.ok || !data.ok) {
-      const msg =
-        data.error === "INVITE_INVALID" ? "Invite-Code ist falsch." :
-        data.error === "MISSING_FIELDS" ? "E-Mail/Passwort fehlt." :
-        "Registrieren fehlgeschlagen.";
-      return setMsg(authMsg, msg, false);
-    }
+if (!res.ok || !data.ok) {
+  const detail = data?.error || data?.message || raw || "no body";
+  return setMsg(authMsg, `Registrieren fehlgeschlagen (${res.status}): ${detail}`, false);
+}
 
     setMsg(authMsg, "Konto erstellt. Bitte anmelden. Freischaltung durch Admin nötig.", true);
     if (password) password.value = "";
