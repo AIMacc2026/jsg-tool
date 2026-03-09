@@ -113,3 +113,15 @@ input,select{
     flex: 1;
   }
 }
+.pwWrap{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.pwWrap input{
+  flex:1;
+}
+.pwToggle{
+  width:auto;
+  padding: 0 10px;
+}
