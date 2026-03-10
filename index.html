@@ -4,13 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JSG Trainings-App</title>
-  <link rel="stylesheet" href="./style.css" />
 
-  <!-- Supabase UMD -->
+  <!-- Cache-Busting: bei Updates ASSET_V hochsetzen -->
+  <script>
+    window.ASSET_V = 1;
+  </script>
+
+  <link rel="stylesheet" href="./style.css?v=1" />
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
-
-  <!-- App (nur EINMAL, mit defer) -->
-  <script src="./app.js" defer></script>
+  <script src="./app.js?v=1" defer></script>
 </head>
 
 <body>
@@ -33,6 +36,7 @@
       </div>
     </header>
 
+    <!-- AUTH -->
     <section id="authSection" class="card">
       <h2>Anmelden</h2>
 
@@ -45,7 +49,7 @@
         <label>
           Passwort
           <div class="pwWrap">
-            <input id="password" type="password" autocomplete="password" placeholder="••••••••" />
+            <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
             <button id="pwToggle" type="button" class="btn btn-ghost pwToggle">👁</button>
           </div>
         </label>
@@ -64,6 +68,7 @@
       <div id="authMsg" class="msg"></div>
     </section>
 
+    <!-- ENTRY -->
     <section id="appSection" class="card hidden">
       <h2>Eintrag</h2>
 
@@ -164,10 +169,21 @@
       <div id="saveMsg" class="msg"></div>
     </section>
 
+    <!-- RESULTS -->
     <section id="resultsSection" class="card hidden">
       <h2>Ergebnisse</h2>
 
       <div class="grid">
+        <label>
+          Team
+          <select id="resTeamSelect"></select>
+        </label>
+
+        <label>
+          Spieler (optional)
+          <select id="resPlayerSelect"></select>
+        </label>
+
         <label>
           Zeitraum
           <select id="rangeSelect">
@@ -177,31 +193,28 @@
             <option value="12">Letzte 12 Monate</option>
           </select>
         </label>
+      </div>
 
-        <label>
-          Hinweis
-          <div class="muted" style="padding:10px 0;">
-            Team + Spieler in „Eintragen“ wählen, dann hier ansehen.
-          </div>
-        </label>
+      <div class="row">
+        <button id="resLoadBtn" class="btn" type="button">Aktualisieren</button>
       </div>
 
       <div id="resultsSummary" class="msg"></div>
 
-      <div class="grid grid-2" style="gap:16px;">
-        <div class="card" style="padding:12px;">
-          <div class="muted" style="margin-bottom:8px;">Anwesenheit / Fehlend</div>
+      <div class="grid grid-2 resultsGrid">
+        <div class="card resultsCard">
+          <div class="muted resultsTitle">Anwesenheit / Fehlend (pro Tag)</div>
           <canvas id="chartAttendance" width="600" height="220" style="width:100%;height:auto;"></canvas>
         </div>
 
-        <div class="card" style="padding:12px;">
-          <div class="muted" style="margin-bottom:8px;">Positiv / Negativ</div>
+        <div class="card resultsCard">
+          <div class="muted resultsTitle">Positiv / Negativ (pro Tag)</div>
           <canvas id="chartFlags" width="600" height="220" style="width:100%;height:auto;"></canvas>
         </div>
       </div>
 
-      <div class="card" style="padding:12px;margin-top:12px;">
-        <div class="muted" style="margin-bottom:8px;">Gründe (Abwesenheit)</div>
+      <div class="card resultsCard" style="margin-top:14px;">
+        <div class="muted resultsTitle">Gründe (Abwesenheit)</div>
         <div id="reasonsList" class="msg"></div>
       </div>
     </section>
