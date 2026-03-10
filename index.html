@@ -20,9 +20,11 @@
         </div>
       </div>
       <div class="userbox">
-        <span id="userLabel" class="muted">Nicht angemeldet</span>
-        <button id="logoutBtn" class="btn btn-ghost hidden">Abmelden</button>
-      </div>
+  <button id="entryViewBtn" class="btn btn-ghost hidden">Eintragen</button>
+  <button id="resultsViewBtn" class="btn btn-ghost hidden">Ergebnisse</button>
+  <span id="userLabel" class="muted">Nicht angemeldet</span>
+  <button id="logoutBtn" class="btn btn-ghost hidden">Abmelden</button>
+</div>
     </header>
 
     <section id="authSection" class="card">
@@ -150,7 +152,47 @@
 
       <div id="saveMsg" class="msg"></div>
     </section>
+<section id="resultsSection" class="card hidden">
+  <h2>Ergebnisse</h2>
 
+  <div class="grid">
+    <label>
+      Zeitraum
+      <select id="rangeSelect">
+        <option value="1">Letzter Monat</option>
+        <option value="3">Letzte 3 Monate</option>
+        <option value="6" selected>Letzte 6 Monate</option>
+        <option value="12">Letzte 12 Monate</option>
+      </select>
+    </label>
+
+    <label>
+      Hinweis
+      <div class="muted" style="padding:10px 0;">
+        Nutzt Team + Spieler aus „Eintragen“. Dann hier Zeitraum wählen.
+      </div>
+    </label>
+  </div>
+
+  <div id="resultsSummary" class="msg"></div>
+
+  <div class="grid grid-2">
+    <div class="card" style="padding:12px;">
+      <div class="muted" style="margin-bottom:8px;">Anwesenheit / Abwesenheit</div>
+      <canvas id="chartAttendance" width="600" height="220" style="width:100%;height:auto;"></canvas>
+    </div>
+
+    <div class="card" style="padding:12px;">
+      <div class="muted" style="margin-bottom:8px;">Positiv / Negativ</div>
+      <canvas id="chartFlags" width="600" height="220" style="width:100%;height:auto;"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px;margin-top:12px;">
+    <div class="muted" style="margin-bottom:8px;">Gründe (Abwesenheit)</div>
+    <div id="reasonsList" class="msg"></div>
+  </div>
+</section>
   </div>
 
 </body>
