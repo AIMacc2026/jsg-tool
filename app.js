@@ -1,10 +1,16 @@
 (() => {
-  // ---------- Hard guard: niemals zweimal initialisieren ----------
+  // Guard: verhindert doppelte Initialisierung
   if (window.__JSG_APP_INIT__) return;
   window.__JSG_APP_INIT__ = true;
 
   const APP_VERSION = "1";
   const STORAGE_KEY = `jsg_auth_${APP_VERSION}`;
+
+  // Auto-Logout nach 5 Minuten Inaktivität
+  const IDLE_MS = 5 * 60 * 1000;
+  let idleTimer = null;
+
+  // Supabase Projekt
   const PROJECT_REF = "ccyhlcwgphvyyazpmcnq";
   const SB_DEFAULT_KEY = `sb-${PROJECT_REF}-auth-token`;
 
@@ -19,20 +25,20 @@
     target.style.color = ok ? "var(--muted)" : "var(--danger)";
   };
 
-  // ---------- cleanup helper (kills all poison keys) ----------
   const clearAuthStorage = () => {
+    // WICHTIG: beim Logout dürfen wir STORAGE_KEY löschen.
+    // Beim App-Start NICHT pauschal STORAGE_KEY löschen, sonst ist die Session nach Refresh weg.
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
       localStorage.removeItem(SB_DEFAULT_KEY);
 
-      sessionStorage.removeItem(STORAGE_KEY);
       sessionStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
       sessionStorage.removeItem(SB_DEFAULT_KEY);
     } catch (_) {}
   };
 
-  // show errors in UI if they happen
+  // Fehler sichtbar machen
   window.onerror = (msg, src, line, col) => {
     const t = el("authMsg");
     if (t) t.textContent = `JS-Fehler: ${msg} (${line}:${col})`;
@@ -43,7 +49,7 @@
     if (t) t.textContent = `Promise-Fehler: ${m}`;
   };
 
-  // ---------- Supabase client (exactly one) ----------
+  // Supabase UMD
   const SB = window.Supabase || window.supabase || window.supabaseJs;
   if (!SB || typeof SB.createClient !== "function") {
     const t = el("authMsg");
@@ -51,8 +57,8 @@
     return;
   }
 
-  // kill any old keys from prior versions (before client starts)
-  clearAuthStorage();
+  // Nur den alten default-key entfernen (nicht STORAGE_KEY!)
+  try { localStorage.removeItem(SB_DEFAULT_KEY); } catch (_) {}
 
   const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
@@ -64,7 +70,7 @@
     },
   });
 
-  // ---------- DOM refs ----------
+  // DOM
   const authSection = el("authSection");
   const appSection = el("appSection");
   const resultsSection = el("resultsSection");
@@ -109,19 +115,37 @@
   const nextBtn = el("nextBtn");
   const saveMsg = el("saveMsg");
 
+  // Results
+  const resTeamSelect = el("resTeamSelect");
+  const resPlayerSelect = el("resPlayerSelect");
   const rangeSelect = el("rangeSelect");
+  const resLoadBtn = el("resLoadBtn");
+
   const resultsSummary = el("resultsSummary");
   const reasonsList = el("reasonsList");
   const chartAttendance = el("chartAttendance");
   const chartFlags = el("chartFlags");
 
-  // ---------- state ----------
+  // State
   const state = {
     anwesenheit: true,
     abgemeldet: false,
     config: { typen: [], gruende: [], kategorien: [] },
     teams: [],
-    players: [],
+  };
+
+  const resetIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => logout(true), IDLE_MS);
+  };
+
+  const bindActivity = () => {
+    // bewusst KEIN mousemove
+    ["click", "keydown", "touchstart", "pointerdown", "scroll"].forEach(evt => {
+      document.addEventListener(evt, () => {
+        resetIdle();
+      }, { passive: true });
+    });
   };
 
   const wordsCount = (s) => (!s ? 0 : s.trim().split(/\s+/).filter(Boolean).length);
@@ -133,7 +157,6 @@
     opt0.value = "";
     opt0.textContent = placeholder;
     selectEl.appendChild(opt0);
-
     for (const it of items) {
       const o = document.createElement("option");
       o.value = it.id;
@@ -152,7 +175,6 @@
 
   const updateAttendanceUI = () => {
     setActive(attJa, attNein, state.anwesenheit, true);
-
     if (state.anwesenheit) {
       state.abgemeldet = false;
       setActive(excJa, excNein, state.abgemeldet, true);
@@ -183,13 +205,12 @@
     resultsSection?.classList.add("hidden");
   };
 
-  const showResultsView = async () => {
+  const showResultsView = () => {
     appSection?.classList.add("hidden");
     resultsSection?.classList.remove("hidden");
-    await loadResultsForSelection();
   };
 
-  // ---------- load config/teams/players ----------
+  // Data loads
   const loadConfig = async () => {
     const [typen, gruende, kategorien] = await Promise.all([
       supabase.from("config_trainingstypen").select("id,wert,sortierung").eq("aktiv", true).order("sortierung"),
@@ -200,27 +221,22 @@
     if (gruende.error) throw gruende.error;
     if (kategorien.error) throw kategorien.error;
 
-    state.config.typen = (typen.data || []).map((x) => ({ id: x.id, label: x.wert }));
-    state.config.gruende = (gruende.data || []).map((x) => ({ id: x.id, label: x.wert }));
-    state.config.kategorien = (kategorien.data || []).map((x) => ({ id: x.id, label: x.wert }));
-
-    fillSelect(typSelect, state.config.typen, "Trainingstyp wählen…");
-    fillSelect(grundSelect, state.config.gruende, "Grund wählen…");
-    fillSelect(katSelect, state.config.kategorien, "Kategorie wählen…");
+    fillSelect(typSelect, (typen.data || []).map(x => ({ id: x.id, label: x.wert })), "Trainingstyp wählen…");
+    fillSelect(grundSelect, (gruende.data || []).map(x => ({ id: x.id, label: x.wert })), "Grund wählen…");
+    fillSelect(katSelect, (kategorien.data || []).map(x => ({ id: x.id, label: x.wert })), "Kategorie wählen…");
   };
 
   const loadTeams = async () => {
     const { data, error } = await supabase.from("teams").select("id,name").eq("aktiv", true).order("name");
     if (error) throw error;
-    state.teams = (data || []).map((x) => ({ id: x.id, label: x.name }));
+
+    state.teams = (data || []).map(x => ({ id: x.id, label: x.name }));
     fillSelect(teamSelect, state.teams, "Team wählen…");
+    fillSelect(resTeamSelect, state.teams, "Team wählen…");
   };
 
-  const loadPlayersForTeam = async (teamId) => {
-    // kill stale list immediately
-    state.players = [];
-    fillSelect(playerSelect, [], "Spieler wählen…");
-
+  const loadPlayersForTeam = async (teamId, selectEl) => {
+    fillSelect(selectEl, [], "Spieler wählen…");
     if (!teamId) return;
 
     const { data, error } = await supabase
@@ -229,28 +245,25 @@
       .eq("team_id", teamId)
       .is("bis_datum", null);
 
-    if (error) {
-      setMsg(saveMsg, `Spieler laden fehlgeschlagen: ${error.message}`, false);
-      return;
-    }
+    if (error) throw error;
 
     const list = (data || [])
-      .map((r) => r.players)
-      .filter((p) => p && p.status === "aktiv")
-      .map((p) => ({ id: p.id, label: `${p.vorname} ${p.nachname} ${p.jahrgang}` }))
+      .map(r => r.players)
+      .filter(p => p && p.status === "aktiv")
+      .map(p => ({ id: p.id, label: `${p.vorname} ${p.nachname} ${p.jahrgang}` }))
       .sort((a, b) => a.label.localeCompare(b.label, "de"));
 
-    state.players = list;
-    fillSelect(playerSelect, list, list.length ? "Spieler wählen…" : "Keine Spieler im Team");
+    fillSelect(selectEl, list, list.length ? "Spieler wählen…" : "Keine Spieler im Team");
   };
 
   const refreshAppData = async () => {
     await loadConfig();
     await loadTeams();
-    await loadPlayersForTeam(teamSelect?.value || "");
+    await loadPlayersForTeam(teamSelect?.value || "", playerSelect);
+    await loadPlayersForTeam(resTeamSelect?.value || "", resPlayerSelect);
   };
 
-  // ---------- session UI ----------
+  // Session UI
   const setSessionUI = async () => {
     const { data } = await supabase.auth.getSession();
     const session = data.session;
@@ -259,11 +272,9 @@
       authSection?.classList.remove("hidden");
       appSection?.classList.add("hidden");
       resultsSection?.classList.add("hidden");
-
       logoutBtn?.classList.add("hidden");
       entryViewBtn?.classList.add("hidden");
       resultsViewBtn?.classList.add("hidden");
-
       if (userLabel) userLabel.textContent = "Nicht angemeldet";
       return;
     }
@@ -280,12 +291,13 @@
 
     try {
       await refreshAppData();
+      resetIdle();
     } catch (e) {
       setMsg(saveMsg, `Laden fehlgeschlagen: ${e.message}`, false);
     }
   };
 
-  // ---------- auth actions ----------
+  // AUTH
   const signup = async () => {
     setMsg(authMsg, "");
     const em = (email?.value || "").trim();
@@ -335,20 +347,21 @@
       loginBtn.textContent = "Lädt…";
 
       const em = (email?.value || "").trim();
-      const pw = (password?.value || "");
+      const pw = password?.value || "";
 
       if (!em) { setMsg(authMsg, "E-Mail fehlt.", false); return; }
       if (!pw) { setMsg(authMsg, "Passwort fehlt.", false); return; }
 
       const { error } = await Promise.race([
         supabase.auth.signInWithPassword({ email: em, password: pw }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("Login timeout")), 6000)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Login timeout")), 8000)),
       ]);
 
       if (error) { setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false); return; }
 
       setMsg(authMsg, "Angemeldet.", true);
       await setSessionUI();
+      resetIdle();
     } catch (_) {
       setMsg(authMsg, "Login hängt oder wurde blockiert. Bitte erneut versuchen.", false);
     } finally {
@@ -357,29 +370,25 @@
     }
   };
 
-  const logout = async () => {
-    // UI sofort zurück
+  const logout = async (auto = false) => {
+    if (!auto) setMsg(authMsg, "Abgemeldet.", true);
+
+    try { await supabase.auth.signOut({ scope: "local" }); } catch (_) {}
+    clearAuthStorage();
+
     authSection?.classList.remove("hidden");
     appSection?.classList.add("hidden");
     resultsSection?.classList.add("hidden");
-
     logoutBtn?.classList.add("hidden");
     entryViewBtn?.classList.add("hidden");
     resultsViewBtn?.classList.add("hidden");
-
     if (userLabel) userLabel.textContent = "Nicht angemeldet";
     if (password) password.value = "";
-    setMsg(authMsg, "Abgemeldet.", true);
-
-    try {
-      await supabase.auth.signOut({ scope: "local" });
-    } catch (_) {}
-
-    clearAuthStorage();
   };
 
-  // ---------- save entry ----------
+  // SAVE (kein Offline-Puffer!)
   const saveEntry = async () => {
+    resetIdle();
     setMsg(saveMsg, "");
 
     const d = datum?.value;
@@ -432,177 +441,186 @@
       .select("id")
       .single();
 
-    if (res.error) return setMsg(saveMsg, res.error.message || "Speichern fehlgeschlagen.", false);
+    if (res.error) {
+      setMsg(saveMsg, `Speichern fehlgeschlagen: ${res.error.message}`, false);
+      return;
+    }
 
     setMsg(saveMsg, "Gespeichert.", true);
-
-    if (resultsSection && !resultsSection.classList.contains("hidden")) {
-      await loadResultsForSelection();
-    }
   };
 
   const nextPlayer = () => {
-    const idx = state.players.findIndex((p) => p.id === playerSelect?.value);
-    if (idx === -1) { if (playerSelect) playerSelect.value = ""; return; }
-    const next = state.players[idx + 1];
-    if (playerSelect) playerSelect.value = next ? next.id : "";
+    resetIdle();
+    const opts = [...(playerSelect?.options || [])].filter(o => o.value);
+    const idx = opts.findIndex(o => o.value === playerSelect.value);
+    const next = opts[idx + 1];
+    if (playerSelect) playerSelect.value = next ? next.value : "";
   };
 
-  // ---------- results ----------
-  function toISODate(d) {
+  // RESULTS pro Tag
+  const toISO = (d) => {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
-  }
-  function startDateMonthsBack(months) {
+  };
+  const startDateMonthsBack = (months) => {
     const d = new Date();
-    d.setHours(0, 0, 0, 0);
+    d.setHours(0,0,0,0);
     d.setMonth(d.getMonth() - Number(months));
     return d;
-  }
-  function pct(part, total) {
-    if (!total) return "0%";
-    return `${Math.round((part / total) * 100)}%`;
-  }
+  };
+  const pct = (part, total) => total ? `${Math.round((part/total)*100)}%` : "0%";
 
-  function drawLine(ctx, labels, seriesA, seriesB, titleA, titleB) {
-    const w = ctx.canvas.width;
-    const h = ctx.canvas.height;
-    ctx.clearRect(0, 0, w, h);
+  const drawLine = (ctx, labels, seriesA, seriesB, titleA, titleB) => {
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    ctx.clearRect(0,0,w,h);
+    const padL=40,padR=10,padT=10,padB=30;
 
-    const padL = 40, padR = 10, padT = 10, padB = 30;
-
-    ctx.strokeStyle = "#444";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle="#444"; ctx.lineWidth=1;
     ctx.beginPath();
-    ctx.moveTo(padL, padT);
-    ctx.lineTo(padL, h - padB);
-    ctx.lineTo(w - padR, h - padB);
+    ctx.moveTo(padL,padT);
+    ctx.lineTo(padL,h-padB);
+    ctx.lineTo(w-padR,h-padB);
     ctx.stroke();
 
     const maxVal = Math.max(1, ...seriesA, ...seriesB);
     const n = labels.length || 1;
 
-    function xy(i, val) {
-      const x = padL + (i * (w - padL - padR)) / Math.max(1, n - 1);
-      const y = (h - padB) - (val * (h - padT - padB)) / maxVal;
-      return [x, y];
-    }
+    const xy = (i,val)=>[
+      padL + (i*(w-padL-padR))/Math.max(1,n-1),
+      (h-padB) - (val*(h-padT-padB))/maxVal
+    ];
 
-    function plot(series, color) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      series.forEach((v, i) => {
-        const [x, y] = xy(i, v);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
+    const plot=(s,c)=>{
+      ctx.strokeStyle=c; ctx.lineWidth=2; ctx.beginPath();
+      s.forEach((v,i)=>{ const [x,y]=xy(i,v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
       ctx.stroke();
-    }
+    };
 
-    plot(seriesA, "#2e7dff");
-    plot(seriesB, "#ff3b3b");
+    plot(seriesA,"#2e7dff");
+    plot(seriesB,"#ff3b3b");
 
-    ctx.fillStyle = "#aaa";
-    ctx.font = "12px system-ui";
-    ctx.fillText(`${titleA} (blau)`, padL, h - 10);
-    ctx.fillText(`${titleB} (rot)`, padL + 140, h - 10);
-  }
+    ctx.fillStyle="#aaa"; ctx.font="12px system-ui";
+    ctx.fillText(`${titleA} (blau)`, padL, h-10);
+    ctx.fillText(`${titleB} (rot)`, padL+140, h-10);
+  };
 
-  async function loadResultsForSelection() {
+  const loadResults = async () => {
+    resetIdle();
     setMsg(resultsSummary, "");
     if (reasonsList) reasonsList.textContent = "";
 
-    const team_id = teamSelect?.value;
-    const player_id = playerSelect?.value;
+    const team_id = resTeamSelect?.value;
+    const player_id = resPlayerSelect?.value || "";
     const months = rangeSelect?.value || "6";
+    if (!team_id) return setMsg(resultsSummary, "Team wählen.", false);
 
-    if (!team_id) return setMsg(resultsSummary, "Bitte zuerst ein Team wählen (in „Eintragen“).", false);
-    if (!player_id) return setMsg(resultsSummary, "Bitte zuerst einen Spieler wählen (in „Eintragen“).", false);
+    const startISO = toISO(startDateMonthsBack(months));
 
-    const startISO = toISODate(startDateMonthsBack(months));
-
-    const { data, error } = await supabase
+    let q = supabase
       .from("training_entries")
-      .select("trainingsdatum, anwesenheit, abgemeldet, auffaelligkeit, grund_id")
+      .select("trainingsdatum, player_id, anwesenheit, abgemeldet, auffaelligkeit, grund_id")
       .eq("team_id", team_id)
-      .eq("player_id", player_id)
       .gte("trainingsdatum", startISO)
       .order("trainingsdatum", { ascending: true });
 
-    if (error) return setMsg(resultsSummary, `Ergebnisse laden fehlgeschlagen: ${error.message}`, false);
+    if (player_id) q = q.eq("player_id", player_id);
+
+    const { data, error } = await q;
+    if (error) return setMsg(resultsSummary, `Laden fehlgeschlagen: ${error.message}`, false);
 
     const rows = data || [];
-    const total = rows.length;
+    if (!rows.length) return setMsg(resultsSummary, "Keine Daten im Zeitraum.", true);
 
-    const present = rows.filter((r) => r.anwesenheit === true).length;
-    const absent = rows.filter((r) => r.anwesenheit === false).length;
-    const excused = rows.filter((r) => r.anwesenheit === false && r.abgemeldet === true).length;
-    const unexcused = rows.filter((r) => r.anwesenheit === false && r.abgemeldet === false).length;
-
-    const pos = rows.filter((r) => r.auffaelligkeit === "positive").length;
-    const neg = rows.filter((r) => r.auffaelligkeit === "negative").length;
-
+    // date -> player -> aggregates (per day)
+    const dayPerPlayer = {};
     const reasonCounts = {};
-    rows.forEach((r) => {
-      if (r.anwesenheit === false && r.grund_id) {
-        reasonCounts[r.grund_id] = (reasonCounts[r.grund_id] || 0) + 1;
+
+    rows.forEach(r => {
+      const d = r.trainingsdatum;
+      const pid = r.player_id;
+      if (!dayPerPlayer[d]) dayPerPlayer[d] = {};
+      if (!dayPerPlayer[d][pid]) dayPerPlayer[d][pid] = {
+        presentAny:false,
+        anyUnexcused:false,
+        posAny:false,
+        negAny:false,
+      };
+
+      const cell = dayPerPlayer[d][pid];
+
+      if (r.anwesenheit === true) cell.presentAny = true;
+
+      if (r.anwesenheit === false) {
+        if (r.abgemeldet !== true) cell.anyUnexcused = true;
+        if (r.grund_id) reasonCounts[r.grund_id] = (reasonCounts[r.grund_id]||0) + 1;
       }
+
+      if (r.auffaelligkeit === "positive") cell.posAny = true;
+      if (r.auffaelligkeit === "negative") cell.negAny = true;
     });
 
-    const reasonIds = Object.keys(reasonCounts);
-    let reasonMap = {};
-    if (reasonIds.length) {
-      const rr = await supabase.from("config_gruende").select("id,wert").in("id", reasonIds);
-      if (!rr.error) (rr.data || []).forEach((x) => (reasonMap[x.id] = x.wert));
-    }
-
+    // reduce day series
     const dayMap = {};
-    rows.forEach((r) => {
-      const d = r.trainingsdatum;
-      if (!dayMap[d]) dayMap[d] = { present: 0, absent: 0, pos: 0, neg: 0 };
-      if (r.anwesenheit) dayMap[d].present += 1;
-      else dayMap[d].absent += 1;
-      if (r.auffaelligkeit === "positive") dayMap[d].pos += 1;
-      if (r.auffaelligkeit === "negative") dayMap[d].neg += 1;
+    Object.keys(dayPerPlayer).sort().forEach(date => {
+      const players = Object.values(dayPerPlayer[date]);
+      const present = players.filter(p => p.presentAny).length;
+      const absent  = players.filter(p => !p.presentAny).length;
+      const pos     = players.filter(p => p.posAny).length;
+      const neg     = players.filter(p => p.negAny).length;
+
+      dayMap[date] = { present, absent, pos, neg };
     });
 
     const labels = Object.keys(dayMap).sort();
-    const sPresent = labels.map((d) => dayMap[d].present);
-    const sAbsent = labels.map((d) => dayMap[d].absent);
-    const sPos = labels.map((d) => dayMap[d].pos);
-    const sNeg = labels.map((d) => dayMap[d].neg);
+    const sPresent = labels.map(d => dayMap[d].present);
+    const sAbsent  = labels.map(d => dayMap[d].absent);
+    const sPos     = labels.map(d => dayMap[d].pos);
+    const sNeg     = labels.map(d => dayMap[d].neg);
+
+    const totalDays = labels.length;
+    const sumPresent = sPresent.reduce((a,b)=>a+b,0);
+    const sumAbsent  = sAbsent.reduce((a,b)=>a+b,0);
+    const sumPos     = sPos.reduce((a,b)=>a+b,0);
+    const sumNeg     = sNeg.reduce((a,b)=>a+b,0);
+
+    const denom = sumPresent + sumAbsent;
 
     const lines = [
       `Zeitraum: letzte ${months} Monat(e)`,
-      `Einträge gesamt: ${total}`,
-      `Anwesenheit: ${present} (${pct(present, total)})`,
-      `Fehlend: ${absent} (${pct(absent, total)})`,
-      `— abgemeldet: ${excused} (${pct(excused, total)})`,
-      `— unentschuldigt: ${unexcused} (${pct(unexcused, total)})`,
-      `Positiv: ${pos} (${pct(pos, total)})`,
-      `Negativ: ${neg} (${pct(neg, total)})`,
+      player_id ? `Spieler-Ansicht (pro Tag)` : `Team-Ansicht (pro Tag, Summe Spieler)`,
+      `Tage mit Training: ${totalDays}`,
+      `Anwesend: ${sumPresent} (${pct(sumPresent, denom)})`,
+      `Fehlend: ${sumAbsent} (${pct(sumAbsent, denom)})`,
+      `Positiv: ${sumPos} (${pct(sumPos, denom)})`,
+      `Negativ: ${sumNeg} (${pct(sumNeg, denom)})`,
     ];
     setMsg(resultsSummary, lines.join(" · "), true);
 
+    // reasons -> names
+    const reasonIds = Object.keys(reasonCounts);
     if (!reasonIds.length) {
       if (reasonsList) reasonsList.textContent = "Keine Gründe im Zeitraum erfasst.";
     } else {
+      const rr = await supabase.from("config_gruende").select("id,wert").in("id", reasonIds);
+      const nameMap = {};
+      if (!rr.error) (rr.data||[]).forEach(x => nameMap[x.id] = x.wert);
+
       const out = reasonIds
-        .map((id) => ({ id, name: reasonMap[id] || id, n: reasonCounts[id] }))
-        .sort((a, b) => b.n - a.n)
-        .map((x) => `${x.name}: ${x.n}`)
+        .map(id => ({ name: nameMap[id] || id, n: reasonCounts[id] }))
+        .sort((a,b)=>b.n-a.n)
+        .map(x => `${x.name}: ${x.n}`)
         .join(" · ");
+
       if (reasonsList) reasonsList.textContent = out;
     }
 
     if (chartAttendance) drawLine(chartAttendance.getContext("2d"), labels, sPresent, sAbsent, "Anwesend", "Fehlend");
     if (chartFlags) drawLine(chartFlags.getContext("2d"), labels, sPos, sNeg, "Positiv", "Negativ");
-  }
+  };
 
-  // ---------- event bindings ----------
+  // EVENTS
   if (pwToggle && password) {
     pwToggle.addEventListener("click", () => {
       const isPw = password.type === "password";
@@ -611,42 +629,40 @@
     });
   }
 
-  if (attJa) attJa.addEventListener("click", () => { state.anwesenheit = true; updateAttendanceUI(); });
-  if (attNein) attNein.addEventListener("click", () => { state.anwesenheit = false; updateAttendanceUI(); });
-  if (excJa) excJa.addEventListener("click", () => { state.abgemeldet = true; updateExcusedUI(); });
-  if (excNein) excNein.addEventListener("click", () => { state.abgemeldet = false; updateExcusedUI(); });
+  if (attJa) attJa.addEventListener("click", () => { state.anwesenheit = true; updateAttendanceUI(); resetIdle(); });
+  if (attNein) attNein.addEventListener("click", () => { state.anwesenheit = false; updateAttendanceUI(); resetIdle(); });
+  if (excJa) excJa.addEventListener("click", () => { state.abgemeldet = true; updateExcusedUI(); resetIdle(); });
+  if (excNein) excNein.addEventListener("click", () => { state.abgemeldet = false; updateExcusedUI(); resetIdle(); });
 
-  if (flagSelect) flagSelect.addEventListener("change", updateFlagUI);
+  if (flagSelect) flagSelect.addEventListener("change", () => { updateFlagUI(); resetIdle(); });
 
-  if (teamSelect) {
-    teamSelect.addEventListener("change", async () => {
-      if (playerSelect) playerSelect.value = "";
-      await loadPlayersForTeam(teamSelect.value);
-      if (resultsSection && !resultsSection.classList.contains("hidden")) await loadResultsForSelection();
-    });
-  }
+  if (teamSelect) teamSelect.addEventListener("change", async () => {
+    resetIdle();
+    try { await loadPlayersForTeam(teamSelect.value, playerSelect); } catch (e) { setMsg(saveMsg, e.message, false); }
+  });
 
-  if (playerSelect) {
-    playerSelect.addEventListener("change", async () => {
-      if (resultsSection && !resultsSection.classList.contains("hidden")) await loadResultsForSelection();
-    });
-  }
+  if (resTeamSelect) resTeamSelect.addEventListener("change", async () => {
+    resetIdle();
+    try { await loadPlayersForTeam(resTeamSelect.value, resPlayerSelect); } catch (e) { setMsg(resultsSummary, e.message, false); }
+  });
 
-  if (rangeSelect) rangeSelect.addEventListener("change", loadResultsForSelection);
-
-  if (entryViewBtn) entryViewBtn.addEventListener("click", showEntryView);
-  if (resultsViewBtn) resultsViewBtn.addEventListener("click", showResultsView);
-
-  if (loginBtn) loginBtn.addEventListener("click", login);
-  if (signupBtn) signupBtn.addEventListener("click", signup);
-  if (logoutBtn) logoutBtn.addEventListener("click", logout);
+  if (loginBtn) loginBtn.addEventListener("click", () => { resetIdle(); login(); });
+  if (signupBtn) signupBtn.addEventListener("click", () => { resetIdle(); signup(); });
+  if (logoutBtn) logoutBtn.addEventListener("click", () => logout(false));
 
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
   if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
 
-  // ---------- init ----------
+  if (entryViewBtn) entryViewBtn.addEventListener("click", () => { showEntryView(); resetIdle(); });
+  if (resultsViewBtn) resultsViewBtn.addEventListener("click", () => { showResultsView(); resetIdle(); });
+
+  if (resLoadBtn) resLoadBtn.addEventListener("click", loadResults);
+
+  // INIT
   updateAttendanceUI();
   updateFlagUI();
+  bindActivity();
+
   supabase.auth.onAuthStateChange(() => setSessionUI());
   setSessionUI();
 })();
