@@ -648,7 +648,8 @@
 
   if (loginBtn) loginBtn.addEventListener("click", () => { resetIdle(); login(); });
   if (signupBtn) signupBtn.addEventListener("click", () => { resetIdle(); signup(); });
-  if (logoutBtn) logoutBtn.addEventListener("click", () => logout(false));
+  if (logoutBtn) logoutBtn.addEventListener("click", () => { setMsg(authMsg, "Logout-Click angekommen.", true); logout(false);
+});
 
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
   if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
