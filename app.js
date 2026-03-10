@@ -26,17 +26,40 @@
   };
 
   const clearAuthStorage = () => {
-    // WICHTIG: beim Logout dürfen wir STORAGE_KEY löschen.
-    // Beim App-Start NICHT pauschal STORAGE_KEY löschen, sonst ist die Session nach Refresh weg.
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-      localStorage.removeItem(SB_DEFAULT_KEY);
+  const keysToRemove = [
+    STORAGE_KEY,
+    `${STORAGE_KEY}-code-verifier`,
+    SB_DEFAULT_KEY,
+    `${SB_DEFAULT_KEY}-code-verifier`,
+    "supabase.auth.token", // legacy
+  ];
 
-      sessionStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-      sessionStorage.removeItem(SB_DEFAULT_KEY);
-    } catch (_) {}
-  };
+  // Direkt bekannte Keys löschen
+  try {
+    keysToRemove.forEach((k) => {
+      try { localStorage.removeItem(k); } catch (_) {}
+      try { sessionStorage.removeItem(k); } catch (_) {}
+    });
+  } catch (_) {}
+
+  // Zusätzlich: alle Supabase-Auth Keys für dieses Projekt entfernen
+  // (das ist der Teil, der dir das Cache-Löschen erspart)
+  try {
+    const prefixA = `sb-${PROJECT_REF}-auth-`;      // neue Varianten
+    const prefixB = `sb-${PROJECT_REF}-auth-token`; // häufigster Key
+    const killMatching = (store) => {
+      for (let i = store.length - 1; i >= 0; i--) {
+        const k = store.key(i);
+        if (!k) continue;
+        if (k.startsWith(prefixA) || k.startsWith(prefixB)) {
+          store.removeItem(k);
+        }
+      }
+    };
+    killMatching(localStorage);
+    killMatching(sessionStorage);
+  } catch (_) {}
+};
 
   // Fehler sichtbar machen
   window.onerror = (msg, src, line, col) => {
@@ -371,7 +394,7 @@
   };
 
   const logout = async () => {
-  // 1) UI sofort auf Login zurück (damit es niemals "hängen" kann)
+  // UI sofort sichtbar auf Login stellen (damit es nie "hängen" kann)
   authSection?.classList.remove("hidden");
   appSection?.classList.add("hidden");
   resultsSection?.classList.add("hidden");
@@ -384,14 +407,15 @@
   if (password) password.value = "";
   setMsg(authMsg, "Abgemeldet.", true);
 
-  // 2) Supabase wirklich abmelden (kein scope-Experiment)
+  // 1) Session serverseitig + lokal beenden (ohne scope -> sauberste Variante)
   try {
     await supabase.auth.signOut();
-  } catch (_) {
-    // ignorieren – UI ist schon safe
-  }
+  } catch (_) {}
 
-  // 3) UI final absichern: Session neu prüfen
+  // 2) Danach Storage hart säubern
+  clearAuthStorage();
+
+  // 3) UI final synchronisieren (damit Refresh/Login danach sauber geht)
   try {
     await setSessionUI();
   } catch (_) {}
