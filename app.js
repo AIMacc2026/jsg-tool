@@ -1,28 +1,58 @@
 (() => {
+  // ---------- Hard guard: niemals zweimal initialisieren ----------
+  if (window.__JSG_APP_INIT__) return;
+  window.__JSG_APP_INIT__ = true;
+
   const APP_VERSION = "1";
   const STORAGE_KEY = `jsg_auth_${APP_VERSION}`;
+  const PROJECT_REF = "ccyhlcwgphvyyazpmcnq";
+  const SB_DEFAULT_KEY = `sb-${PROJECT_REF}-auth-token`;
 
-  // ---------- Basic error surfacing ----------
+  const SUPABASE_URL = "https://ccyhlcwgphvyyazpmcnq.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_l3XkI9FMLP25WRwbqJaiPA_542-9zGS";
+
+  const el = (id) => document.getElementById(id);
+
+  const setMsg = (target, text, ok = true) => {
+    if (!target) return;
+    target.textContent = text || "";
+    target.style.color = ok ? "var(--muted)" : "var(--danger)";
+  };
+
+  // ---------- cleanup helper (kills all poison keys) ----------
+  const clearAuthStorage = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+      localStorage.removeItem(SB_DEFAULT_KEY);
+
+      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+      sessionStorage.removeItem(SB_DEFAULT_KEY);
+    } catch (_) {}
+  };
+
+  // show errors in UI if they happen
   window.onerror = (msg, src, line, col) => {
-    const t = document.getElementById("authMsg");
+    const t = el("authMsg");
     if (t) t.textContent = `JS-Fehler: ${msg} (${line}:${col})`;
   };
   window.onunhandledrejection = (e) => {
-    const t = document.getElementById("authMsg");
+    const t = el("authMsg");
     const m = (e && e.reason && e.reason.message) ? e.reason.message : String(e.reason || e);
     if (t) t.textContent = `Promise-Fehler: ${m}`;
   };
 
-  // ---------- Supabase ----------
-  const SUPABASE_URL = "https://ccyhlcwgphvyyazpmcnq.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_l3XkI9FMLP25WRwbqJaiPA_542-9zGS";
-
+  // ---------- Supabase client (exactly one) ----------
   const SB = window.Supabase || window.supabase || window.supabaseJs;
   if (!SB || typeof SB.createClient !== "function") {
-    const t = document.getElementById("authMsg");
-    if (t) t.textContent = "Supabase-Library nicht geladen (index.html Script-Reihenfolge prüfen).";
-    throw new Error("Supabase UMD not loaded");
+    const t = el("authMsg");
+    if (t) t.textContent = "Supabase-Library nicht geladen.";
+    return;
   }
+
+  // kill any old keys from prior versions (before client starts)
+  clearAuthStorage();
 
   const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
@@ -33,60 +63,6 @@
       detectSessionInUrl: false,
     },
   });
-
-  // Cleanup old storage keys (avoid weird multi-instance behavior)
-  try {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith("jsg_auth_") && k !== STORAGE_KEY) localStorage.removeItem(k);
-    }
-  } catch (_) {}
-    
-  // Also clean old Supabase default auth key (from older versions / other builds)
-  const PROJECT_REF = "ccyhlcwgphvyyazpmcnq";
-  const SB_DEFAULT_KEY = `sb-${PROJECT_REF}-auth-token`;
-
-  const clearAuthStorage = () => {
-    try {
-      // our custom key + verifier
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-
-      // old default key (can poison auth on some browsers)
-      localStorage.removeItem(SB_DEFAULT_KEY);
-
-      // sometimes sessionStorage keeps verifiers
-      sessionStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-      sessionStorage.removeItem(SB_DEFAULT_KEY);
-    } catch (_) {}
-  };
-
-  // ---------- Helpers ----------
-  const el = (id) => document.getElementById(id);
-
-  const setMsg = (target, text, ok = true) => {
-    if (!target) return;
-    target.textContent = text || "";
-    target.style.color = ok ? "var(--muted)" : "var(--danger)";
-  };
-
-  const fillSelect = (selectEl, items, placeholder = "Bitte wählen…") => {
-    if (!selectEl) return;
-    selectEl.innerHTML = "";
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = placeholder;
-    selectEl.appendChild(opt0);
-
-    for (const it of items) {
-      const o = document.createElement("option");
-      o.value = it.id;
-      o.textContent = it.label;
-      selectEl.appendChild(o);
-    }
-  };
-
-  const wordsCount = (s) => (!s ? 0 : s.trim().split(/\s+/).filter(Boolean).length);
 
   // ---------- DOM refs ----------
   const authSection = el("authSection");
@@ -101,10 +77,10 @@
   const email = el("email");
   const password = el("password");
   const pwToggle = el("pwToggle");
+  const inviteCode = el("inviteCode");
   const loginBtn = el("loginBtn");
   const signupBtn = el("signupBtn");
   const authMsg = el("authMsg");
-  const inviteCode = el("inviteCode");
 
   const datum = el("datum");
   const teamSelect = el("teamSelect");
@@ -133,14 +109,13 @@
   const nextBtn = el("nextBtn");
   const saveMsg = el("saveMsg");
 
-  // Results UI
   const rangeSelect = el("rangeSelect");
   const resultsSummary = el("resultsSummary");
   const reasonsList = el("reasonsList");
   const chartAttendance = el("chartAttendance");
   const chartFlags = el("chartFlags");
 
-  // ---------- State ----------
+  // ---------- state ----------
   const state = {
     anwesenheit: true,
     abgemeldet: false,
@@ -149,7 +124,24 @@
     players: [],
   };
 
-  // ---------- UI logic ----------
+  const wordsCount = (s) => (!s ? 0 : s.trim().split(/\s+/).filter(Boolean).length);
+
+  const fillSelect = (selectEl, items, placeholder = "Bitte wählen…") => {
+    if (!selectEl) return;
+    selectEl.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = placeholder;
+    selectEl.appendChild(opt0);
+
+    for (const it of items) {
+      const o = document.createElement("option");
+      o.value = it.id;
+      o.textContent = it.label;
+      selectEl.appendChild(o);
+    }
+  };
+
   const setActive = (btnTrue, btnFalse, value, okColor = true) => {
     if (!btnTrue || !btnFalse) return;
     btnTrue.classList.toggle("active", value === true);
@@ -171,9 +163,7 @@
     }
   };
 
-  const updateExcusedUI = () => {
-    setActive(excJa, excNein, state.abgemeldet, true);
-  };
+  const updateExcusedUI = () => setActive(excJa, excNein, state.abgemeldet, true);
 
   const updateFlagUI = () => {
     const f = flagSelect?.value || "none";
@@ -181,7 +171,6 @@
     katWrap?.classList.toggle("hidden", !show);
     sevWrap?.classList.toggle("hidden", !show);
     notizWrap?.classList.toggle("hidden", !show);
-
     if (!show) {
       if (katSelect) katSelect.value = "";
       if (sevSelect) sevSelect.value = "";
@@ -200,14 +189,13 @@
     await loadResultsForSelection();
   };
 
-  // ---------- Data loading ----------
+  // ---------- load config/teams/players ----------
   const loadConfig = async () => {
     const [typen, gruende, kategorien] = await Promise.all([
       supabase.from("config_trainingstypen").select("id,wert,sortierung").eq("aktiv", true).order("sortierung"),
       supabase.from("config_gruende").select("id,wert,sortierung").eq("aktiv", true).order("sortierung"),
       supabase.from("config_kategorien").select("id,wert,sortierung").eq("aktiv", true).order("sortierung"),
     ]);
-
     if (typen.error) throw typen.error;
     if (gruende.error) throw gruende.error;
     if (kategorien.error) throw kategorien.error;
@@ -224,18 +212,12 @@
   const loadTeams = async () => {
     const { data, error } = await supabase.from("teams").select("id,name").eq("aktiv", true).order("name");
     if (error) throw error;
-
     state.teams = (data || []).map((x) => ({ id: x.id, label: x.name }));
     fillSelect(teamSelect, state.teams, "Team wählen…");
-
-    // If current selection is invalid (after reload), reset to empty
-    if (teamSelect && teamSelect.value && !state.teams.some((t) => t.id === teamSelect.value)) {
-      teamSelect.value = "";
-    }
   };
 
   const loadPlayersForTeam = async (teamId) => {
-    // Always clear previous list FIRST to avoid stale 2010 list sticking around
+    // kill stale list immediately
     state.players = [];
     fillSelect(playerSelect, [], "Spieler wählen…");
 
@@ -248,7 +230,6 @@
       .is("bis_datum", null);
 
     if (error) {
-      // If query fails, keep list empty (don’t leave stale list)
       setMsg(saveMsg, `Spieler laden fehlgeschlagen: ${error.message}`, false);
       return;
     }
@@ -269,7 +250,7 @@
     await loadPlayersForTeam(teamSelect?.value || "");
   };
 
-  // ---------- Auth / session UI ----------
+  // ---------- session UI ----------
   const setSessionUI = async () => {
     const { data } = await supabase.auth.getSession();
     const session = data.session;
@@ -304,10 +285,9 @@
     }
   };
 
-  // ---------- Signup via /signup (invite-only) ----------
+  // ---------- auth actions ----------
   const signup = async () => {
     setMsg(authMsg, "");
-
     const em = (email?.value || "").trim();
     const pw = password?.value || "";
     const code = (inviteCode?.value || "").trim();
@@ -317,10 +297,8 @@
     if (!code) return setMsg(authMsg, "Invite-Code fehlt.", false);
 
     try {
-      if (signupBtn) {
-        signupBtn.disabled = true;
-        signupBtn.textContent = "Lädt…";
-      }
+      signupBtn.disabled = true;
+      signupBtn.textContent = "Lädt…";
       setMsg(authMsg, "Registrierung läuft…", true);
 
       const res = await fetch("/signup", {
@@ -331,61 +309,56 @@
 
       const raw = await res.text();
       let data = {};
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch (_) {}
+      try { data = raw ? JSON.parse(raw) : {}; } catch (_) {}
 
       if (!res.ok || !data.ok) {
-        const codeMsg = (data && (data.error || data.message)) ? (data.error || data.message) : "";
-        if (codeMsg === "INVITE_INVALID") return setMsg(authMsg, "Invite-Code ist falsch.", false);
-        if (codeMsg === "MISSING_FIELDS") return setMsg(authMsg, "E-Mail/Passwort/Invite-Code fehlt.", false);
-        if (typeof codeMsg === "string" && codeMsg.toLowerCase().includes("already")) return setMsg(authMsg, "E-Mail ist bereits registriert.", false);
-        if (typeof codeMsg === "string" && codeMsg.toLowerCase().includes("password")) return setMsg(authMsg, "Passwort erfüllt die Anforderungen nicht.", false);
+        const c = (data && (data.error || data.message)) ? (data.error || data.message) : "";
+        if (c === "INVITE_INVALID") return setMsg(authMsg, "Invite-Code ist falsch.", false);
+        if (c === "MISSING_FIELDS") return setMsg(authMsg, "E-Mail/Passwort/Invite-Code fehlt.", false);
+        if (typeof c === "string" && c.toLowerCase().includes("already")) return setMsg(authMsg, "E-Mail ist bereits registriert.", false);
+        if (typeof c === "string" && c.toLowerCase().includes("password")) return setMsg(authMsg, "Passwort erfüllt die Anforderungen nicht.", false);
         return setMsg(authMsg, "Registrieren fehlgeschlagen.", false);
       }
 
       setMsg(authMsg, "Konto erstellt. Bitte anmelden. Freischaltung durch Admin nötig.", true);
       if (password) password.value = "";
     } finally {
-      if (signupBtn) {
-        signupBtn.disabled = false;
-        signupBtn.textContent = "Registrieren";
-      }
+      signupBtn.disabled = false;
+      signupBtn.textContent = "Registrieren";
     }
   };
 
-  // ---------- Login / Logout ----------
   const login = async () => {
-  try {
-    setMsg(authMsg, "Anmeldung läuft…", true);
-    loginBtn.disabled = true;
-    loginBtn.textContent = "Lädt…";
+    try {
+      setMsg(authMsg, "Anmeldung läuft…", true);
+      loginBtn.disabled = true;
+      loginBtn.textContent = "Lädt…";
 
-    const em = (email?.value || "").trim();
-    const pw = (password?.value || "");
+      const em = (email?.value || "").trim();
+      const pw = (password?.value || "");
 
-    if (!em) { setMsg(authMsg, "E-Mail fehlt.", false); return; }
-    if (!pw) { setMsg(authMsg, "Passwort fehlt.", false); return; }
+      if (!em) { setMsg(authMsg, "E-Mail fehlt.", false); return; }
+      if (!pw) { setMsg(authMsg, "Passwort fehlt.", false); return; }
 
-    const { data, error } = await Promise.race([
-      supabase.auth.signInWithPassword({ email: em, password: pw }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("Login timeout")), 6000)),
-    ]);
+      const { error } = await Promise.race([
+        supabase.auth.signInWithPassword({ email: em, password: pw }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Login timeout")), 6000)),
+      ]);
 
-    if (error) { setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false); return; }
+      if (error) { setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false); return; }
 
-    setMsg(authMsg, "Angemeldet.", true);
-    await setSessionUI();
-  } catch (e) {
-    setMsg(authMsg, "Login hängt oder wurde blockiert. Bitte erneut versuchen.", false);
-  } finally {
-    loginBtn.disabled = false;
-    loginBtn.textContent = "Anmelden";
-  }
-};
+      setMsg(authMsg, "Angemeldet.", true);
+      await setSessionUI();
+    } catch (_) {
+      setMsg(authMsg, "Login hängt oder wurde blockiert. Bitte erneut versuchen.", false);
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.textContent = "Anmelden";
+    }
+  };
 
   const logout = async () => {
-    // UI sofort zurücksetzen
+    // UI sofort zurück
     authSection?.classList.remove("hidden");
     appSection?.classList.add("hidden");
     resultsSection?.classList.add("hidden");
@@ -398,16 +371,14 @@
     if (password) password.value = "";
     setMsg(authMsg, "Abgemeldet.", true);
 
-       // sign out (local reicht)
     try {
       await supabase.auth.signOut({ scope: "local" });
     } catch (_) {}
 
-    // danach: Storage wirklich leer ziehen (einmal reicht)
     clearAuthStorage();
   };
-    
-  // ---------- Save entry ----------
+
+  // ---------- save entry ----------
   const saveEntry = async () => {
     setMsg(saveMsg, "");
 
@@ -465,7 +436,6 @@
 
     setMsg(saveMsg, "Gespeichert.", true);
 
-    // Optional: refresh results if currently visible
     if (resultsSection && !resultsSection.classList.contains("hidden")) {
       await loadResultsForSelection();
     }
@@ -473,29 +443,24 @@
 
   const nextPlayer = () => {
     const idx = state.players.findIndex((p) => p.id === playerSelect?.value);
-    if (idx === -1) {
-      if (playerSelect) playerSelect.value = "";
-      return;
-    }
+    if (idx === -1) { if (playerSelect) playerSelect.value = ""; return; }
     const next = state.players[idx + 1];
     if (playerSelect) playerSelect.value = next ? next.id : "";
   };
 
-  // ---------- Results logic ----------
+  // ---------- results ----------
   function toISODate(d) {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }
-
   function startDateMonthsBack(months) {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     d.setMonth(d.getMonth() - Number(months));
     return d;
   }
-
   function pct(part, total) {
     if (!total) return "0%";
     return `${Math.round((part / total) * 100)}%`;
@@ -594,7 +559,6 @@
       if (!rr.error) (rr.data || []).forEach((x) => (reasonMap[x.id] = x.wert));
     }
 
-    // day series
     const dayMap = {};
     rows.forEach((r) => {
       const d = r.trainingsdatum;
@@ -638,34 +602,7 @@
     if (chartFlags) drawLine(chartFlags.getContext("2d"), labels, sPos, sNeg, "Positiv", "Negativ");
   }
 
-  // ---------- Event bindings ----------
-  if (teamSelect) {
-    teamSelect.addEventListener("change", async () => {
-      // Clear player selection immediately
-      if (playerSelect) playerSelect.value = "";
-      await loadPlayersForTeam(teamSelect.value);
-      // If results view open, refresh
-      if (resultsSection && !resultsSection.classList.contains("hidden")) {
-        await loadResultsForSelection();
-      }
-    });
-  }
-
-  if (flagSelect) flagSelect.addEventListener("change", updateFlagUI);
-
-  if (attJa) attJa.addEventListener("click", () => { state.anwesenheit = true; updateAttendanceUI(); });
-  if (attNein) attNein.addEventListener("click", () => { state.anwesenheit = false; updateAttendanceUI(); });
-
-  if (excJa) attJa && excJa.addEventListener("click", () => { state.abgemeldet = true; updateExcusedUI(); });
-  if (excNein) excNein.addEventListener("click", () => { state.abgemeldet = false; updateExcusedUI(); });
-
-  if (loginBtn) loginBtn.addEventListener("click", login);
-  if (logoutBtn) logoutBtn.addEventListener("click", logout);
-  if (signupBtn) signupBtn.addEventListener("click", signup);
-
-  if (saveBtn) saveBtn.addEventListener("click", saveEntry);
-  if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
-
+  // ---------- event bindings ----------
   if (pwToggle && password) {
     pwToggle.addEventListener("click", () => {
       const isPw = password.type === "password";
@@ -674,22 +611,42 @@
     });
   }
 
-  if (entryViewBtn) entryViewBtn.addEventListener("click", showEntryView);
-  if (resultsViewBtn) resultsViewBtn.addEventListener("click", showResultsView);
-  if (rangeSelect) rangeSelect.addEventListener("change", loadResultsForSelection);
+  if (attJa) attJa.addEventListener("click", () => { state.anwesenheit = true; updateAttendanceUI(); });
+  if (attNein) attNein.addEventListener("click", () => { state.anwesenheit = false; updateAttendanceUI(); });
+  if (excJa) excJa.addEventListener("click", () => { state.abgemeldet = true; updateExcusedUI(); });
+  if (excNein) excNein.addEventListener("click", () => { state.abgemeldet = false; updateExcusedUI(); });
 
-  if (playerSelect) {
-    playerSelect.addEventListener("change", async () => {
-      if (resultsSection && !resultsSection.classList.contains("hidden")) {
-        await loadResultsForSelection();
-      }
+  if (flagSelect) flagSelect.addEventListener("change", updateFlagUI);
+
+  if (teamSelect) {
+    teamSelect.addEventListener("change", async () => {
+      if (playerSelect) playerSelect.value = "";
+      await loadPlayersForTeam(teamSelect.value);
+      if (resultsSection && !resultsSection.classList.contains("hidden")) await loadResultsForSelection();
     });
   }
 
-  // ---------- Init ----------
+  if (playerSelect) {
+    playerSelect.addEventListener("change", async () => {
+      if (resultsSection && !resultsSection.classList.contains("hidden")) await loadResultsForSelection();
+    });
+  }
+
+  if (rangeSelect) rangeSelect.addEventListener("change", loadResultsForSelection);
+
+  if (entryViewBtn) entryViewBtn.addEventListener("click", showEntryView);
+  if (resultsViewBtn) resultsViewBtn.addEventListener("click", showResultsView);
+
+  if (loginBtn) loginBtn.addEventListener("click", login);
+  if (signupBtn) signupBtn.addEventListener("click", signup);
+  if (logoutBtn) logoutBtn.addEventListener("click", logout);
+
+  if (saveBtn) saveBtn.addEventListener("click", saveEntry);
+  if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
+
+  // ---------- init ----------
   updateAttendanceUI();
   updateFlagUI();
-
   supabase.auth.onAuthStateChange(() => setSessionUI());
   setSessionUI();
 })();
