@@ -41,6 +41,25 @@
       if (k && k.startsWith("jsg_auth_") && k !== STORAGE_KEY) localStorage.removeItem(k);
     }
   } catch (_) {}
+    
+  // Also clean old Supabase default auth key (from older versions / other builds)
+  const PROJECT_REF = "ccyhlcwgphvyyazpmcnq";
+  const SB_DEFAULT_KEY = `sb-${PROJECT_REF}-auth-token`;
+
+  const clearAuthStorage = () => {
+    try {
+      // our custom key + verifier
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+
+      // old default key (can poison auth on some browsers)
+      localStorage.removeItem(SB_DEFAULT_KEY);
+
+      // sometimes sessionStorage keeps verifiers
+      sessionStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
+      sessionStorage.removeItem(SB_DEFAULT_KEY);
+    } catch (_) {}
+  };
 
   // ---------- Helpers ----------
   const el = (id) => document.getElementById(id);
@@ -337,27 +356,33 @@
 
   // ---------- Login / Logout ----------
   const login = async () => {
-    try {
-      setMsg(authMsg, "Anmeldung läuft…", true);
-      loginBtn.disabled = true;
-      loginBtn.textContent = "Lädt…";
+  try {
+    setMsg(authMsg, "Anmeldung läuft…", true);
+    loginBtn.disabled = true;
+    loginBtn.textContent = "Lädt…";
 
-      const em = (email?.value || "").trim();
-      const pw = password?.value || "";
+    const em = (email?.value || "").trim();
+    const pw = (password?.value || "");
 
-      if (!em) return setMsg(authMsg, "E-Mail fehlt.", false);
-      if (!pw) return setMsg(authMsg, "Passwort fehlt.", false);
+    if (!em) { setMsg(authMsg, "E-Mail fehlt.", false); return; }
+    if (!pw) { setMsg(authMsg, "Passwort fehlt.", false); return; }
 
-      const { error } = await supabase.auth.signInWithPassword({ email: em, password: pw });
-      if (error) return setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false);
+    const { data, error } = await Promise.race([
+      supabase.auth.signInWithPassword({ email: em, password: pw }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("Login timeout")), 6000)),
+    ]);
 
-      setMsg(authMsg, "Angemeldet.", true);
-      await setSessionUI();
-    } finally {
-      loginBtn.disabled = false;
-      loginBtn.textContent = "Anmelden";
-    }
-  };
+    if (error) { setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false); return; }
+
+    setMsg(authMsg, "Angemeldet.", true);
+    await setSessionUI();
+  } catch (e) {
+    setMsg(authMsg, "Login hängt oder wurde blockiert. Bitte erneut versuchen.", false);
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.textContent = "Anmelden";
+  }
+};
 
   const logout = async () => {
     // UI sofort zurücksetzen
@@ -373,34 +398,15 @@
     if (password) password.value = "";
     setMsg(authMsg, "Abgemeldet.", true);
 
-    // Storage cleanup
+       // sign out (local reicht)
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(`${STORAGE_KEY}-code-verifier`);
-    } catch (_) {}
-    try {
-      sessionStorage.clear();
+      await supabase.auth.signOut({ scope: "local" });
     } catch (_) {}
 
-    // best-effort sign out
-    try {
-      await Promise.race([
-        supabase.auth.signOut(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("signOut timeout")), 1500)),
-      ]);
-    } catch (_) {}
-
-    // final check
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) {
-        try {
-          localStorage.removeItem(STORAGE_KEY);
-        } catch (_) {}
-      }
-    } catch (_) {}
+    // danach: Storage wirklich leer ziehen (einmal reicht)
+    clearAuthStorage();
   };
-
+    
   // ---------- Save entry ----------
   const saveEntry = async () => {
     setMsg(saveMsg, "");
