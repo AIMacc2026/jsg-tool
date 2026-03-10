@@ -25,42 +25,7 @@
     target.style.color = ok ? "var(--muted)" : "var(--danger)";
   };
 
-  const clearAuthStorage = () => {
-  const keysToRemove = [
-    STORAGE_KEY,
-    `${STORAGE_KEY}-code-verifier`,
-    SB_DEFAULT_KEY,
-    `${SB_DEFAULT_KEY}-code-verifier`,
-    "supabase.auth.token", // legacy
-  ];
-
-  // Direkt bekannte Keys löschen
-  try {
-    keysToRemove.forEach((k) => {
-      try { localStorage.removeItem(k); } catch (_) {}
-      try { sessionStorage.removeItem(k); } catch (_) {}
-    });
-  } catch (_) {}
-
-  // Zusätzlich: alle Supabase-Auth Keys für dieses Projekt entfernen
-  // (das ist der Teil, der dir das Cache-Löschen erspart)
-  try {
-    const prefixA = `sb-${PROJECT_REF}-auth-`;      // neue Varianten
-    const prefixB = `sb-${PROJECT_REF}-auth-token`; // häufigster Key
-    const killMatching = (store) => {
-      for (let i = store.length - 1; i >= 0; i--) {
-        const k = store.key(i);
-        if (!k) continue;
-        if (k.startsWith(prefixA) || k.startsWith(prefixB)) {
-          store.removeItem(k);
-        }
-      }
-    };
-    killMatching(localStorage);
-    killMatching(sessionStorage);
-  } catch (_) {}
-};
-
+  const clearAuthStorage = () => {};
   // Fehler sichtbar machen
   window.onerror = (msg, src, line, col) => {
     const t = el("authMsg");
@@ -83,15 +48,7 @@
   // Nur den alten default-key entfernen (nicht STORAGE_KEY!)
   try { localStorage.removeItem(SB_DEFAULT_KEY); } catch (_) {}
 
-  const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      storageKey: STORAGE_KEY,
-      storage: window.localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-    },
-  });
+  const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // DOM
   const authSection = el("authSection");
@@ -394,7 +351,11 @@
   };
 
   const logout = async () => {
-  // UI sofort sichtbar auf Login stellen (damit es nie "hängen" kann)
+  try {
+    await supabase.auth.signOut();
+  } catch (_) {}
+
+  // UI zuverlässig zurücksetzen
   authSection?.classList.remove("hidden");
   appSection?.classList.add("hidden");
   resultsSection?.classList.add("hidden");
@@ -406,19 +367,6 @@
   if (userLabel) userLabel.textContent = "Nicht angemeldet";
   if (password) password.value = "";
   setMsg(authMsg, "Abgemeldet.", true);
-
-  // 1) Session serverseitig + lokal beenden (ohne scope -> sauberste Variante)
-  try {
-    await supabase.auth.signOut();
-  } catch (_) {}
-
-  // 2) Danach Storage hart säubern
-  clearAuthStorage();
-
-  // 3) UI final synchronisieren (damit Refresh/Login danach sauber geht)
-  try {
-    await setSessionUI();
-  } catch (_) {}
 };
 
   // SAVE (kein Offline-Puffer!)
