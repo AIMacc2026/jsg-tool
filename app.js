@@ -370,21 +370,32 @@
     }
   };
 
-  const logout = async (auto = false) => {
-    if (!auto) setMsg(authMsg, "Abgemeldet.", true);
+  const logout = async () => {
+  // 1) UI sofort auf Login zurück (damit es niemals "hängen" kann)
+  authSection?.classList.remove("hidden");
+  appSection?.classList.add("hidden");
+  resultsSection?.classList.add("hidden");
 
-    try { await supabase.auth.signOut({ scope: "local" }); } catch (_) {}
-    clearAuthStorage();
+  logoutBtn?.classList.add("hidden");
+  entryViewBtn?.classList.add("hidden");
+  resultsViewBtn?.classList.add("hidden");
 
-    authSection?.classList.remove("hidden");
-    appSection?.classList.add("hidden");
-    resultsSection?.classList.add("hidden");
-    logoutBtn?.classList.add("hidden");
-    entryViewBtn?.classList.add("hidden");
-    resultsViewBtn?.classList.add("hidden");
-    if (userLabel) userLabel.textContent = "Nicht angemeldet";
-    if (password) password.value = "";
-  };
+  if (userLabel) userLabel.textContent = "Nicht angemeldet";
+  if (password) password.value = "";
+  setMsg(authMsg, "Abgemeldet.", true);
+
+  // 2) Supabase wirklich abmelden (kein scope-Experiment)
+  try {
+    await supabase.auth.signOut();
+  } catch (_) {
+    // ignorieren – UI ist schon safe
+  }
+
+  // 3) UI final absichern: Session neu prüfen
+  try {
+    await setSessionUI();
+  } catch (_) {}
+};
 
   // SAVE (kein Offline-Puffer!)
   const saveEntry = async () => {
