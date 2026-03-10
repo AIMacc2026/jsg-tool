@@ -47,8 +47,12 @@ try {
 
   const authSection = el("authSection");
   const appSection = el("appSection");
+  const resultsSection = el("resultsSection");
   const userLabel = el("userLabel");
   const logoutBtn = el("logoutBtn");
+
+const entryViewBtn = el("entryViewBtn");
+const resultsViewBtn = el("resultsViewBtn");
 
   const email = el("email");
   const password = el("password");
@@ -136,6 +140,11 @@ if (!res.ok || !data.ok) {
   const saveBtn = el("saveBtn");
   const nextBtn = el("nextBtn");
   const saveMsg = el("saveMsg");
+  const rangeSelect = el("rangeSelect");
+  const resultsSummary = el("resultsSummary");
+  const reasonsList = el("reasonsList");
+  const chartAttendance = el("chartAttendance");
+  const chartFlags = el("chartFlags");
 
   let state = {
     anwesenheit: true,
@@ -272,8 +281,12 @@ if (!res.ok || !data.ok) {
     }
 
     authSection?.classList.add("hidden");
-    appSection?.classList.remove("hidden");
-    logoutBtn?.classList.remove("hidden");
+appSection?.classList.remove("hidden");
+resultsSection?.classList.add("hidden");
+
+logoutBtn?.classList.remove("hidden");
+entryViewBtn?.classList.remove("hidden");
+resultsViewBtn?.classList.remove("hidden");
     if (userLabel) userLabel.textContent = session.user.email || "Angemeldet";
 
     try {
@@ -309,8 +322,12 @@ if (!res.ok || !data.ok) {
   const logout = async () => {
   // UI sofort zurücksetzen (darf nie hängen)
   authSection?.classList.remove("hidden");
-  appSection?.classList.add("hidden");
-  logoutBtn?.classList.add("hidden");
+appSection?.classList.add("hidden");
+resultsSection?.classList.add("hidden");
+
+logoutBtn?.classList.add("hidden");
+entryViewBtn?.classList.add("hidden");
+resultsViewBtn?.classList.add("hidden");
   if (userLabel) userLabel.textContent = "Nicht angemeldet";
   if (password) password.value = "";
   setMsg(authMsg, "Abgemeldet.", true);
@@ -411,6 +428,196 @@ if (!res.ok || !data.ok) {
   };
 
     // --- EVENT BINDINGS (single source of truth) ---
+  function toISODate(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function startDateMonthsBack(months) {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  d.setMonth(d.getMonth() - Number(months));
+  return d;
+}
+
+function pct(part, total) {
+  if (!total) return "0%";
+  return `${Math.round((part / total) * 100)}%`;
+}
+
+function drawLine(ctx, labels, seriesA, seriesB, titleA, titleB) {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  // Padding
+  const padL = 40, padR = 10, padT = 10, padB = 30;
+
+  // Axis
+  ctx.strokeStyle = "#444";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT);
+  ctx.lineTo(padL, h - padB);
+  ctx.lineTo(w - padR, h - padB);
+  ctx.stroke();
+
+  const maxVal = Math.max(1, ...seriesA, ...seriesB);
+  const n = labels.length || 1;
+
+  function xy(i, val) {
+    const x = padL + (i * (w - padL - padR)) / Math.max(1, n - 1);
+    const y = (h - padB) - (val * (h - padT - padB)) / maxVal;
+    return [x,y];
+  }
+
+  function plot(series, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    series.forEach((v,i) => {
+      const [x,y] = xy(i, v);
+      if (i === 0) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+
+  // Two lines
+  plot(seriesA, "#2e7dff");
+  plot(seriesB, "#ff3b3b");
+
+  // Legend
+  ctx.fillStyle = "#aaa";
+  ctx.font = "12px system-ui";
+  ctx.fillText(`${titleA} (blau)`, padL, h - 10);
+  ctx.fillText(`${titleB} (rot)`, padL + 140, h - 10);
+}
+
+async function loadResultsForSelection() {
+  setMsg(resultsSummary, "");
+  if (reasonsList) reasonsList.textContent = "";
+
+  const team_id = teamSelect?.value;
+  const player_id = playerSelect?.value;
+  const months = rangeSelect?.value || "6";
+
+  if (!team_id) return setMsg(resultsSummary, "Bitte zuerst ein Team wählen (in „Eintragen“).", false);
+  if (!player_id) return setMsg(resultsSummary, "Bitte zuerst einen Spieler wählen (in „Eintragen“).", false);
+
+  const start = startDateMonthsBack(months);
+  const startISO = toISODate(start);
+
+  // Einträge laden (nur das was wir brauchen)
+  const { data, error } = await supabase
+    .from("training_entries")
+    .select("trainingsdatum, anwesenheit, abgemeldet, auffaelligkeit, grund_id")
+    .eq("team_id", team_id)
+    .eq("player_id", player_id)
+    .gte("trainingsdatum", startISO)
+    .order("trainingsdatum", { ascending: true });
+
+  if (error) return setMsg(resultsSummary, `Ergebnisse laden fehlgeschlagen: ${error.message}`, false);
+
+  const rows = data || [];
+  const total = rows.length;
+
+  const present = rows.filter(r => r.anwesenheit === true).length;
+  const absent = rows.filter(r => r.anwesenheit === false).length;
+  const excused = rows.filter(r => r.anwesenheit === false && r.abgemeldet === true).length;
+  const unexcused = rows.filter(r => r.anwesenheit === false && r.abgemeldet === false).length;
+
+  const pos = rows.filter(r => r.auffaelligkeit === "positive").length;
+  const neg = rows.filter(r => r.auffaelligkeit === "negative").length;
+
+  // Gründe zählen (nur Abwesenheit)
+  const reasonCounts = {};
+  rows.forEach(r => {
+    if (r.anwesenheit === false && r.grund_id) {
+      reasonCounts[r.grund_id] = (reasonCounts[r.grund_id] || 0) + 1;
+    }
+  });
+
+  // Grund-Namen holen
+  const reasonIds = Object.keys(reasonCounts);
+  let reasonMap = {};
+  if (reasonIds.length) {
+    const rr = await supabase
+      .from("config_gruende")
+      .select("id,wert")
+      .in("id", reasonIds);
+
+    if (!rr.error) {
+      (rr.data || []).forEach(x => reasonMap[x.id] = x.wert);
+    }
+  }
+
+  // Tages-Serien bauen
+  // Key = trainingsdatum, dann zählen wir pro Tag
+  const dayMap = {};
+  rows.forEach(r => {
+    const d = r.trainingsdatum;
+    if (!dayMap[d]) dayMap[d] = { present:0, absent:0, pos:0, neg:0 };
+    if (r.anwesenheit) dayMap[d].present += 1;
+    else dayMap[d].absent += 1;
+    if (r.auffaelligkeit === "positive") dayMap[d].pos += 1;
+    if (r.auffaelligkeit === "negative") dayMap[d].neg += 1;
+  });
+
+  const labels = Object.keys(dayMap).sort();
+  const sPresent = labels.map(d => dayMap[d].present);
+  const sAbsent  = labels.map(d => dayMap[d].absent);
+  const sPos     = labels.map(d => dayMap[d].pos);
+  const sNeg     = labels.map(d => dayMap[d].neg);
+
+  // Summary Text
+  const lines = [
+    `Zeitraum: letzte ${months} Monat(e)`,
+    `Trainingstage gesamt: ${total}`,
+    `Anwesenheit: ${present} (${pct(present,total)})`,
+    `Fehlend: ${absent} (${pct(absent,total)})`,
+    `— abgemeldet: ${excused} (${pct(excused,total)})`,
+    `— unentschuldigt: ${unexcused} (${pct(unexcused,total)})`,
+    `Positiv: ${pos} (${pct(pos,total)})`,
+    `Negativ: ${neg} (${pct(neg,total)})`,
+  ];
+  setMsg(resultsSummary, lines.join(" · "), true);
+
+  // Reasons list
+  if (!reasonIds.length) {
+    if (reasonsList) reasonsList.textContent = "Keine Gründe im Zeitraum erfasst.";
+  } else {
+    const out = reasonIds
+      .map(id => ({ id, name: reasonMap[id] || id, n: reasonCounts[id] }))
+      .sort((a,b) => b.n - a.n)
+      .map(x => `${x.name}: ${x.n}`)
+      .join(" · ");
+    if (reasonsList) reasonsList.textContent = out;
+  }
+
+  // Charts
+  if (chartAttendance) {
+    const ctx = chartAttendance.getContext("2d");
+    drawLine(ctx, labels, sPresent, sAbsent, "Anwesend", "Fehlend");
+  }
+  if (chartFlags) {
+    const ctx = chartFlags.getContext("2d");
+    drawLine(ctx, labels, sPos, sNeg, "Positiv", "Negativ");
+  }
+}
+
+function showEntryView() {
+  appSection?.classList.remove("hidden");
+  resultsSection?.classList.add("hidden");
+}
+
+function showResultsView() {
+  appSection?.classList.add("hidden");
+  resultsSection?.classList.remove("hidden");
+  loadResultsForSelection();
+}
   if (teamSelect) teamSelect.addEventListener("change", () => loadPlayersForTeam(teamSelect.value));
   if (flagSelect) flagSelect.addEventListener("change", updateFlagUI);
 
@@ -432,7 +639,12 @@ if (!res.ok || !data.ok) {
     pwToggle.textContent = isPw ? "🙈" : "👁";
   });
 }
-
+if (entryViewBtn) entryViewBtn.addEventListener("click", showEntryView);
+if (resultsViewBtn) resultsViewBtn.addEventListener("click", showResultsView);
+if (rangeSelect) rangeSelect.addEventListener("change", loadResultsForSelection);
+if (playerSelect) playerSelect.addEventListener("change", () => {
+  if (!resultsSection?.classList.contains("hidden")) loadResultsForSelection();
+});
   // --- INIT (after bindings) ---
   updateAttendanceUI();
   updateFlagUI();
