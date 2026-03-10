@@ -125,3 +125,13 @@ input,select{
   width:auto;
   padding: 0 10px;
 }
+/* --- Results spacing / readability --- */
+.resultsGrid { gap: 16px; }
+.resultsCard { padding: 12px; }
+.resultsTitle { margin-bottom: 10px; }
+#resultsSummary { margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }
+
+/* Password field nicer */
+.pwWrap { display:flex; gap:8px; align-items:center; }
+.pwWrap input { flex: 1; }
+.pwToggle { min-width: 44px; }
