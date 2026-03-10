@@ -1,40 +1,20 @@
 (() => {
-  // Guard: verhindert doppelte Initialisierung
+  // Guard gegen doppelte Initialisierung
   if (window.__JSG_APP_INIT__) return;
   window.__JSG_APP_INIT__ = true;
 
-  const APP_VERSION = "1";
-  const STORAGE_KEY = `jsg_auth_${APP_VERSION}`;
+  const SUPABASE_URL = "https://ccyhlcwgphvyyazpmcnq.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_l3XkI9FMLP25WRwbqJaiPA_542-9zGS";
 
   // Auto-Logout nach 5 Minuten Inaktivität
   const IDLE_MS = 5 * 60 * 1000;
   let idleTimer = null;
 
-  // Supabase Projekt
-  const PROJECT_REF = "ccyhlcwgphvyyazpmcnq";
-  const SB_DEFAULT_KEY = `sb-${PROJECT_REF}-auth-token`;
-
-  const SUPABASE_URL = "https://ccyhlcwgphvyyazpmcnq.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_l3XkI9FMLP25WRwbqJaiPA_542-9zGS";
-
   const el = (id) => document.getElementById(id);
-
   const setMsg = (target, text, ok = true) => {
     if (!target) return;
     target.textContent = text || "";
     target.style.color = ok ? "var(--muted)" : "var(--danger)";
-  };
-
-  const clearAuthStorage = () => {};
-  // Fehler sichtbar machen
-  window.onerror = (msg, src, line, col) => {
-    const t = el("authMsg");
-    if (t) t.textContent = `JS-Fehler: ${msg} (${line}:${col})`;
-  };
-  window.onunhandledrejection = (e) => {
-    const t = el("authMsg");
-    const m = (e && e.reason && e.reason.message) ? e.reason.message : String(e.reason || e);
-    if (t) t.textContent = `Promise-Fehler: ${m}`;
   };
 
   // Supabase UMD
@@ -45,9 +25,8 @@
     return;
   }
 
-  // Nur den alten default-key entfernen (nicht STORAGE_KEY!)
-  try { localStorage.removeItem(SB_DEFAULT_KEY); } catch (_) {}
-
+  // WICHTIG: Keine custom storageKeys, kein Cleanup beim Start.
+  // Supabase default Session-Handling ist genau für Login/Logout/Refresh gemacht.
   const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // DOM
@@ -100,18 +79,16 @@
   const resPlayerSelect = el("resPlayerSelect");
   const rangeSelect = el("rangeSelect");
   const resLoadBtn = el("resLoadBtn");
-
   const resultsSummary = el("resultsSummary");
   const reasonsList = el("reasonsList");
   const chartAttendance = el("chartAttendance");
   const chartFlags = el("chartFlags");
 
-  // State
   const state = {
     anwesenheit: true,
     abgemeldet: false,
-    config: { typen: [], gruende: [], kategorien: [] },
     teams: [],
+    config: { typen: [], gruende: [], kategorien: [] },
   };
 
   const resetIdle = () => {
@@ -120,9 +97,9 @@
   };
 
   const bindActivity = () => {
-    // bewusst KEIN mousemove
     ["click", "keydown", "touchstart", "pointerdown", "scroll"].forEach(evt => {
       document.addEventListener(evt, () => {
+        // nur wenn eingeloggt:
         resetIdle();
       }, { passive: true });
     });
@@ -190,7 +167,7 @@
     resultsSection?.classList.remove("hidden");
   };
 
-  // Data loads
+  // ---------- Data ----------
   const loadConfig = async () => {
     const [typen, gruende, kategorien] = await Promise.all([
       supabase.from("config_trainingstypen").select("id,wert,sortierung").eq("aktiv", true).order("sortierung"),
@@ -201,15 +178,18 @@
     if (gruende.error) throw gruende.error;
     if (kategorien.error) throw kategorien.error;
 
-    fillSelect(typSelect, (typen.data || []).map(x => ({ id: x.id, label: x.wert })), "Trainingstyp wählen…");
-    fillSelect(grundSelect, (gruende.data || []).map(x => ({ id: x.id, label: x.wert })), "Grund wählen…");
-    fillSelect(katSelect, (kategorien.data || []).map(x => ({ id: x.id, label: x.wert })), "Kategorie wählen…");
+    state.config.typen = (typen.data || []).map(x => ({ id: x.id, label: x.wert }));
+    state.config.gruende = (gruende.data || []).map(x => ({ id: x.id, label: x.wert }));
+    state.config.kategorien = (kategorien.data || []).map(x => ({ id: x.id, label: x.wert }));
+
+    fillSelect(typSelect, state.config.typen, "Trainingstyp wählen…");
+    fillSelect(grundSelect, state.config.gruende, "Grund wählen…");
+    fillSelect(katSelect, state.config.kategorien, "Kategorie wählen…");
   };
 
   const loadTeams = async () => {
     const { data, error } = await supabase.from("teams").select("id,name").eq("aktiv", true).order("name");
     if (error) throw error;
-
     state.teams = (data || []).map(x => ({ id: x.id, label: x.name }));
     fillSelect(teamSelect, state.teams, "Team wählen…");
     fillSelect(resTeamSelect, state.teams, "Team wählen…");
@@ -231,7 +211,7 @@
       .map(r => r.players)
       .filter(p => p && p.status === "aktiv")
       .map(p => ({ id: p.id, label: `${p.vorname} ${p.nachname} ${p.jahrgang}` }))
-      .sort((a, b) => a.label.localeCompare(b.label, "de"));
+      .sort((a,b) => a.label.localeCompare(b.label, "de"));
 
     fillSelect(selectEl, list, list.length ? "Spieler wählen…" : "Keine Spieler im Team");
   };
@@ -243,7 +223,7 @@
     await loadPlayersForTeam(resTeamSelect?.value || "", resPlayerSelect);
   };
 
-  // Session UI
+  // ---------- Session UI ----------
   const setSessionUI = async () => {
     const { data } = await supabase.auth.getSession();
     const session = data.session;
@@ -252,9 +232,11 @@
       authSection?.classList.remove("hidden");
       appSection?.classList.add("hidden");
       resultsSection?.classList.add("hidden");
+
       logoutBtn?.classList.add("hidden");
       entryViewBtn?.classList.add("hidden");
       resultsViewBtn?.classList.add("hidden");
+
       if (userLabel) userLabel.textContent = "Nicht angemeldet";
       return;
     }
@@ -269,15 +251,11 @@
 
     if (userLabel) userLabel.textContent = session.user.email || "Angemeldet";
 
-    try {
-      await refreshAppData();
-      resetIdle();
-    } catch (e) {
-      setMsg(saveMsg, `Laden fehlgeschlagen: ${e.message}`, false);
-    }
+    await refreshAppData();
+    resetIdle();
   };
 
-  // AUTH
+  // ---------- Auth ----------
   const signup = async () => {
     setMsg(authMsg, "");
     const em = (email?.value || "").trim();
@@ -329,47 +307,40 @@
       const em = (email?.value || "").trim();
       const pw = password?.value || "";
 
-      if (!em) { setMsg(authMsg, "E-Mail fehlt.", false); return; }
-      if (!pw) { setMsg(authMsg, "Passwort fehlt.", false); return; }
+      if (!em) return setMsg(authMsg, "E-Mail fehlt.", false);
+      if (!pw) return setMsg(authMsg, "Passwort fehlt.", false);
 
-      const { error } = await Promise.race([
-        supabase.auth.signInWithPassword({ email: em, password: pw }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("Login timeout")), 8000)),
-      ]);
-
-      if (error) { setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false); return; }
+      const { error } = await supabase.auth.signInWithPassword({ email: em, password: pw });
+      if (error) return setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false);
 
       setMsg(authMsg, "Angemeldet.", true);
       await setSessionUI();
-      resetIdle();
-    } catch (_) {
-      setMsg(authMsg, "Login hängt oder wurde blockiert. Bitte erneut versuchen.", false);
     } finally {
       loginBtn.disabled = false;
       loginBtn.textContent = "Anmelden";
     }
   };
 
-  const logout = async () => {
-  try {
-    await supabase.auth.signOut();
-  } catch (_) {}
+  const logout = async (auto = false) => {
+    try {
+      await supabase.auth.signOut();
+    } catch (_) {}
 
-  // UI zuverlässig zurücksetzen
-  authSection?.classList.remove("hidden");
-  appSection?.classList.add("hidden");
-  resultsSection?.classList.add("hidden");
+    // UI sauber zurück
+    authSection?.classList.remove("hidden");
+    appSection?.classList.add("hidden");
+    resultsSection?.classList.add("hidden");
 
-  logoutBtn?.classList.add("hidden");
-  entryViewBtn?.classList.add("hidden");
-  resultsViewBtn?.classList.add("hidden");
+    logoutBtn?.classList.add("hidden");
+    entryViewBtn?.classList.add("hidden");
+    resultsViewBtn?.classList.add("hidden");
 
-  if (userLabel) userLabel.textContent = "Nicht angemeldet";
-  if (password) password.value = "";
-  setMsg(authMsg, "Abgemeldet.", true);
-};
+    if (userLabel) userLabel.textContent = "Nicht angemeldet";
+    if (password) password.value = "";
+    setMsg(authMsg, auto ? "Automatisch abgemeldet (Inaktivität)." : "Abgemeldet.", true);
+  };
 
-  // SAVE (kein Offline-Puffer!)
+  // ---------- Save ----------
   const saveEntry = async () => {
     resetIdle();
     setMsg(saveMsg, "");
@@ -424,11 +395,7 @@
       .select("id")
       .single();
 
-    if (res.error) {
-      setMsg(saveMsg, `Speichern fehlgeschlagen: ${res.error.message}`, false);
-      return;
-    }
-
+    if (res.error) return setMsg(saveMsg, `Speichern fehlgeschlagen: ${res.error.message}`, false);
     setMsg(saveMsg, "Gespeichert.", true);
   };
 
@@ -440,7 +407,7 @@
     if (playerSelect) playerSelect.value = next ? next.value : "";
   };
 
-  // RESULTS pro Tag
+  // ---------- Results ----------
   const toISO = (d) => {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -469,18 +436,15 @@
 
     const maxVal = Math.max(1, ...seriesA, ...seriesB);
     const n = labels.length || 1;
-
     const xy = (i,val)=>[
       padL + (i*(w-padL-padR))/Math.max(1,n-1),
       (h-padB) - (val*(h-padT-padB))/maxVal
     ];
-
     const plot=(s,c)=>{
       ctx.strokeStyle=c; ctx.lineWidth=2; ctx.beginPath();
       s.forEach((v,i)=>{ const [x,y]=xy(i,v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
       ctx.stroke();
     };
-
     plot(seriesA,"#2e7dff");
     plot(seriesB,"#ff3b3b");
 
@@ -516,7 +480,6 @@
     const rows = data || [];
     if (!rows.length) return setMsg(resultsSummary, "Keine Daten im Zeitraum.", true);
 
-    // date -> player -> aggregates (per day)
     const dayPerPlayer = {};
     const reasonCounts = {};
 
@@ -524,36 +487,27 @@
       const d = r.trainingsdatum;
       const pid = r.player_id;
       if (!dayPerPlayer[d]) dayPerPlayer[d] = {};
-      if (!dayPerPlayer[d][pid]) dayPerPlayer[d][pid] = {
-        presentAny:false,
-        anyUnexcused:false,
-        posAny:false,
-        negAny:false,
-      };
+      if (!dayPerPlayer[d][pid]) dayPerPlayer[d][pid] = { presentAny:false, posAny:false, negAny:false };
 
       const cell = dayPerPlayer[d][pid];
 
       if (r.anwesenheit === true) cell.presentAny = true;
-
-      if (r.anwesenheit === false) {
-        if (r.abgemeldet !== true) cell.anyUnexcused = true;
-        if (r.grund_id) reasonCounts[r.grund_id] = (reasonCounts[r.grund_id]||0) + 1;
+      if (r.anwesenheit === false && r.grund_id) {
+        reasonCounts[r.grund_id] = (reasonCounts[r.grund_id]||0) + 1;
       }
-
       if (r.auffaelligkeit === "positive") cell.posAny = true;
       if (r.auffaelligkeit === "negative") cell.negAny = true;
     });
 
-    // reduce day series
     const dayMap = {};
     Object.keys(dayPerPlayer).sort().forEach(date => {
       const players = Object.values(dayPerPlayer[date]);
-      const present = players.filter(p => p.presentAny).length;
-      const absent  = players.filter(p => !p.presentAny).length;
-      const pos     = players.filter(p => p.posAny).length;
-      const neg     = players.filter(p => p.negAny).length;
-
-      dayMap[date] = { present, absent, pos, neg };
+      dayMap[date] = {
+        present: players.filter(p => p.presentAny).length,
+        absent:  players.filter(p => !p.presentAny).length,
+        pos:     players.filter(p => p.posAny).length,
+        neg:     players.filter(p => p.negAny).length,
+      };
     });
 
     const labels = Object.keys(dayMap).sort();
@@ -562,26 +516,21 @@
     const sPos     = labels.map(d => dayMap[d].pos);
     const sNeg     = labels.map(d => dayMap[d].neg);
 
-    const totalDays = labels.length;
     const sumPresent = sPresent.reduce((a,b)=>a+b,0);
     const sumAbsent  = sAbsent.reduce((a,b)=>a+b,0);
     const sumPos     = sPos.reduce((a,b)=>a+b,0);
     const sumNeg     = sNeg.reduce((a,b)=>a+b,0);
-
     const denom = sumPresent + sumAbsent;
 
-    const lines = [
+    setMsg(resultsSummary, [
       `Zeitraum: letzte ${months} Monat(e)`,
       player_id ? `Spieler-Ansicht (pro Tag)` : `Team-Ansicht (pro Tag, Summe Spieler)`,
-      `Tage mit Training: ${totalDays}`,
       `Anwesend: ${sumPresent} (${pct(sumPresent, denom)})`,
       `Fehlend: ${sumAbsent} (${pct(sumAbsent, denom)})`,
       `Positiv: ${sumPos} (${pct(sumPos, denom)})`,
       `Negativ: ${sumNeg} (${pct(sumNeg, denom)})`,
-    ];
-    setMsg(resultsSummary, lines.join(" · "), true);
+    ].join(" · "), true);
 
-    // reasons -> names
     const reasonIds = Object.keys(reasonCounts);
     if (!reasonIds.length) {
       if (reasonsList) reasonsList.textContent = "Keine Gründe im Zeitraum erfasst.";
@@ -590,20 +539,18 @@
       const nameMap = {};
       if (!rr.error) (rr.data||[]).forEach(x => nameMap[x.id] = x.wert);
 
-      const out = reasonIds
+      if (reasonsList) reasonsList.textContent = reasonIds
         .map(id => ({ name: nameMap[id] || id, n: reasonCounts[id] }))
         .sort((a,b)=>b.n-a.n)
         .map(x => `${x.name}: ${x.n}`)
         .join(" · ");
-
-      if (reasonsList) reasonsList.textContent = out;
     }
 
     if (chartAttendance) drawLine(chartAttendance.getContext("2d"), labels, sPresent, sAbsent, "Anwesend", "Fehlend");
     if (chartFlags) drawLine(chartFlags.getContext("2d"), labels, sPos, sNeg, "Positiv", "Negativ");
   };
 
-  // EVENTS
+  // ---------- Events ----------
   if (pwToggle && password) {
     pwToggle.addEventListener("click", () => {
       const isPw = password.type === "password";
@@ -612,6 +559,9 @@
     });
   }
 
+  if (teamSelect) teamSelect.addEventListener("change", () => loadPlayersForTeam(teamSelect.value, playerSelect));
+  if (resTeamSelect) resTeamSelect.addEventListener("change", () => loadPlayersForTeam(resTeamSelect.value, resPlayerSelect));
+
   if (attJa) attJa.addEventListener("click", () => { state.anwesenheit = true; updateAttendanceUI(); resetIdle(); });
   if (attNein) attNein.addEventListener("click", () => { state.anwesenheit = false; updateAttendanceUI(); resetIdle(); });
   if (excJa) excJa.addEventListener("click", () => { state.abgemeldet = true; updateExcusedUI(); resetIdle(); });
@@ -619,20 +569,9 @@
 
   if (flagSelect) flagSelect.addEventListener("change", () => { updateFlagUI(); resetIdle(); });
 
-  if (teamSelect) teamSelect.addEventListener("change", async () => {
-    resetIdle();
-    try { await loadPlayersForTeam(teamSelect.value, playerSelect); } catch (e) { setMsg(saveMsg, e.message, false); }
-  });
-
-  if (resTeamSelect) resTeamSelect.addEventListener("change", async () => {
-    resetIdle();
-    try { await loadPlayersForTeam(resTeamSelect.value, resPlayerSelect); } catch (e) { setMsg(resultsSummary, e.message, false); }
-  });
-
   if (loginBtn) loginBtn.addEventListener("click", () => { resetIdle(); login(); });
   if (signupBtn) signupBtn.addEventListener("click", () => { resetIdle(); signup(); });
-  if (logoutBtn) logoutBtn.addEventListener("click", () => { setMsg(authMsg, "Logout-Click angekommen.", true); logout(false);
-});
+  if (logoutBtn) logoutBtn.addEventListener("click", () => logout(false));
 
   if (saveBtn) saveBtn.addEventListener("click", saveEntry);
   if (nextBtn) nextBtn.addEventListener("click", nextPlayer);
@@ -642,7 +581,7 @@
 
   if (resLoadBtn) resLoadBtn.addEventListener("click", loadResults);
 
-  // INIT
+  // ---------- Init ----------
   updateAttendanceUI();
   updateFlagUI();
   bindActivity();
