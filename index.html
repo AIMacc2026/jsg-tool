@@ -5,15 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JSG Trainings-App</title>
 
-  <!-- Cache-Busting: bei Updates ASSET_V hochsetzen -->
-  <script>
-    window.ASSET_V = 1;
-  </script>
-
-  <link rel="stylesheet" href="./style.css?v=1" />
+  <!-- Cache-Busting: Version hier manuell erhöhen bei Deploy (z.B. v=2, v=3) -->
+  <link rel="stylesheet" href="./style.css?v=2" />
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
-  <script src="./app.js?v=1" defer></script>
+  <script src="./app.js?v=2" defer></script>
 </head>
 
 <body>
