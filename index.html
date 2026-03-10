@@ -5,9 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JSG Trainings-App</title>
   <link rel="stylesheet" href="./style.css" />
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
-<script src="./app.js" defer></script>
+
+  <!-- Supabase UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
+
+  <!-- App (nur EINMAL, mit defer) -->
+  <script src="./app.js" defer></script>
 </head>
+
 <body>
   <div class="container">
 
@@ -19,37 +24,43 @@
           <div class="subtitle">Eintragen</div>
         </div>
       </div>
+
       <div class="userbox">
-  <button id="entryViewBtn" class="btn btn-ghost hidden">Eintragen</button>
-  <button id="resultsViewBtn" class="btn btn-ghost hidden">Ergebnisse</button>
-  <span id="userLabel" class="muted">Nicht angemeldet</span>
-  <button id="logoutBtn" class="btn btn-ghost hidden">Abmelden</button>
-</div>
+        <button id="entryViewBtn" class="btn btn-ghost hidden" type="button">Eintragen</button>
+        <button id="resultsViewBtn" class="btn btn-ghost hidden" type="button">Ergebnisse</button>
+        <span id="userLabel" class="muted">Nicht angemeldet</span>
+        <button id="logoutBtn" class="btn btn-ghost hidden" type="button">Abmelden</button>
+      </div>
     </header>
 
     <section id="authSection" class="card">
       <h2>Anmelden</h2>
+
       <div class="grid">
         <label>
           E-Mail
           <input id="email" type="email" autocomplete="email" placeholder="name@mail.de" />
         </label>
+
         <label>
           Passwort
           <div class="pwWrap">
-  <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
-  <button id="pwToggle" type="button" class="btn btn-ghost pwToggle">👁</button>
-</div>
+            <input id="password" type="password" autocomplete="password" placeholder="••••••••" />
+            <button id="pwToggle" type="button" class="btn btn-ghost pwToggle">👁</button>
+          </div>
         </label>
+
         <label>
-  Invite-Code
-  <input id="inviteCode" type="text" placeholder="z.B. 123456" />
-</label>
+          Invite-Code
+          <input id="inviteCode" type="text" placeholder="z.B. JSG-2026" />
+        </label>
       </div>
+
       <div class="row">
-  <button id="loginBtn" class="btn">Anmelden</button>
-  <button id="signupBtn" class="btn btn-ghost" type="button">Registrieren</button>
-</div>
+        <button id="loginBtn" class="btn" type="button">Anmelden</button>
+        <button id="signupBtn" class="btn btn-ghost" type="button">Registrieren</button>
+      </div>
+
       <div id="authMsg" class="msg"></div>
     </section>
 
@@ -82,16 +93,16 @@
         <label class="inline">
           <span>Anwesenheit</span>
           <div class="seg">
-            <button type="button" class="segbtn" data-att="true" id="attJa">Ja</button>
-            <button type="button" class="segbtn" data-att="false" id="attNein">Nein</button>
+            <button type="button" class="segbtn" id="attJa">Ja</button>
+            <button type="button" class="segbtn" id="attNein">Nein</button>
           </div>
         </label>
 
-        <label class="inline" id="abmBox">
+        <label class="inline">
           <span>Abgemeldet</span>
           <div class="seg">
-            <button type="button" class="segbtn" data-exc="true" id="excJa">Ja</button>
-            <button type="button" class="segbtn" data-exc="false" id="excNein">Nein</button>
+            <button type="button" class="segbtn" id="excJa">Ja</button>
+            <button type="button" class="segbtn" id="excNein">Nein</button>
           </div>
         </label>
 
@@ -146,54 +157,55 @@
       </div>
 
       <div class="row">
-        <button id="saveBtn" class="btn">Speichern</button>
-        <button id="nextBtn" class="btn btn-ghost">Nächster Spieler</button>
+        <button id="saveBtn" class="btn" type="button">Speichern</button>
+        <button id="nextBtn" class="btn btn-ghost" type="button">Nächster Spieler</button>
       </div>
 
       <div id="saveMsg" class="msg"></div>
     </section>
-<section id="resultsSection" class="card hidden">
-  <h2>Ergebnisse</h2>
 
-  <div class="grid">
-    <label>
-      Zeitraum
-      <select id="rangeSelect">
-        <option value="1">Letzter Monat</option>
-        <option value="3">Letzte 3 Monate</option>
-        <option value="6" selected>Letzte 6 Monate</option>
-        <option value="12">Letzte 12 Monate</option>
-      </select>
-    </label>
+    <section id="resultsSection" class="card hidden">
+      <h2>Ergebnisse</h2>
 
-    <label>
-      Hinweis
-      <div class="muted" style="padding:10px 0;">
-        Nutzt Team + Spieler aus „Eintragen“. Dann hier Zeitraum wählen.
+      <div class="grid">
+        <label>
+          Zeitraum
+          <select id="rangeSelect">
+            <option value="1">Letzter Monat</option>
+            <option value="3">Letzte 3 Monate</option>
+            <option value="6" selected>Letzte 6 Monate</option>
+            <option value="12">Letzte 12 Monate</option>
+          </select>
+        </label>
+
+        <label>
+          Hinweis
+          <div class="muted" style="padding:10px 0;">
+            Team + Spieler in „Eintragen“ wählen, dann hier ansehen.
+          </div>
+        </label>
       </div>
-    </label>
+
+      <div id="resultsSummary" class="msg"></div>
+
+      <div class="grid grid-2" style="gap:16px;">
+        <div class="card" style="padding:12px;">
+          <div class="muted" style="margin-bottom:8px;">Anwesenheit / Fehlend</div>
+          <canvas id="chartAttendance" width="600" height="220" style="width:100%;height:auto;"></canvas>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <div class="muted" style="margin-bottom:8px;">Positiv / Negativ</div>
+          <canvas id="chartFlags" width="600" height="220" style="width:100%;height:auto;"></canvas>
+        </div>
+      </div>
+
+      <div class="card" style="padding:12px;margin-top:12px;">
+        <div class="muted" style="margin-bottom:8px;">Gründe (Abwesenheit)</div>
+        <div id="reasonsList" class="msg"></div>
+      </div>
+    </section>
+
   </div>
-
-  <div id="resultsSummary" class="msg"></div>
-
-  <div class="grid grid-2">
-    <div class="card" style="padding:12px;">
-      <div class="muted" style="margin-bottom:8px;">Anwesenheit / Abwesenheit</div>
-      <canvas id="chartAttendance" width="600" height="220" style="width:100%;height:auto;"></canvas>
-    </div>
-
-    <div class="card" style="padding:12px;">
-      <div class="muted" style="margin-bottom:8px;">Positiv / Negativ</div>
-      <canvas id="chartFlags" width="600" height="220" style="width:100%;height:auto;"></canvas>
-    </div>
-  </div>
-
-  <div class="card" style="padding:12px;margin-top:12px;">
-    <div class="muted" style="margin-bottom:8px;">Gründe (Abwesenheit)</div>
-    <div id="reasonsList" class="msg"></div>
-  </div>
-</section>
-  </div>
-
 </body>
 </html>
