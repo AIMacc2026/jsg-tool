@@ -56,7 +56,14 @@ const clearSupabaseAuth = () => {
 
   // WICHTIG: Keine custom storageKeys, kein Cleanup beim Start.
   // Supabase default Session-Handling ist genau für Login/Logout/Refresh gemacht.
-  const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabase = SB.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    storage: window.localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+  }
+});
 
   // DOM
   const authSection = el("authSection");
