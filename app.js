@@ -4,6 +4,35 @@
   window.__JSG_APP_INIT__ = true;
 
   const SUPABASE_URL = "https://ccyhlcwgphvyyazpmcnq.supabase.co";
+  const PROJECT_REF = "ccyhlcwgphvyyazpmcnq";
+const SB_AUTH_KEY = `sb-${PROJECT_REF}-auth-token`;
+
+const clearSupabaseAuth = () => {
+  const keys = [
+    SB_AUTH_KEY,
+    `${SB_AUTH_KEY}-code-verifier`,
+  ];
+
+  // bekannte Keys killen
+  keys.forEach((k) => {
+    try { localStorage.removeItem(k); } catch (_) {}
+    try { sessionStorage.removeItem(k); } catch (_) {}
+  });
+
+  // alle Varianten für dieses Projekt killen (sicherer in Safari)
+  const killPrefix = (store) => {
+    try {
+      const prefix = `sb-${PROJECT_REF}-auth-`;
+      for (let i = store.length - 1; i >= 0; i--) {
+        const k = store.key(i);
+        if (k && k.startsWith(prefix)) store.removeItem(k);
+      }
+    } catch (_) {}
+  };
+
+  killPrefix(localStorage);
+  killPrefix(sessionStorage);
+};
   const SUPABASE_ANON_KEY = "sb_publishable_l3XkI9FMLP25WRwbqJaiPA_542-9zGS";
 
   // Auto-Logout nach 5 Minuten Inaktivität
@@ -334,7 +363,7 @@
   };
 
   const logout = async (auto = false) => {
-  // UI SOFORT zurücksetzen (darf niemals hängen)
+  // UI sofort zurück
   authSection?.classList.remove("hidden");
   appSection?.classList.add("hidden");
   resultsSection?.classList.add("hidden");
@@ -347,15 +376,18 @@
   if (password) password.value = "";
   setMsg(authMsg, auto ? "Automatisch abgemeldet (Inaktivität)." : "Abgemeldet.", true);
 
-  // Supabase signOut: best effort (darf UI nicht blockieren)
+  // Supabase signOut (best effort)
   try {
     await Promise.race([
       supabase.auth.signOut(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("signOut timeout")), 1500))
+      new Promise((_, rej) => setTimeout(() => rej(new Error("signOut timeout")), 1500)),
     ]);
   } catch (_) {}
 
-  // final: Session-UI neu ziehen
+  // DAS ist der Fix: gezielt Supabase-Auth Keys entfernen
+  clearSupabaseAuth();
+
+  // final sync
   try { await setSessionUI(); } catch (_) {}
 };
 
