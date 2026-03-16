@@ -225,35 +225,47 @@
 
   // ---------- Session UI ----------
   const setSessionUI = async () => {
-    const { data } = await supabase.auth.getSession();
-    const session = data.session;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    setMsg(authMsg, `Session-Fehler: ${error.message}`, false);
+  }
+  const session = data?.session || null;
 
-    if (!session) {
-      authSection?.classList.remove("hidden");
-      appSection?.classList.add("hidden");
-      resultsSection?.classList.add("hidden");
-
-      logoutBtn?.classList.add("hidden");
-      entryViewBtn?.classList.add("hidden");
-      resultsViewBtn?.classList.add("hidden");
-
-      if (userLabel) userLabel.textContent = "Nicht angemeldet";
-      return;
-    }
-
-    authSection?.classList.add("hidden");
-    appSection?.classList.remove("hidden");
+  // NICHT angemeldet → Login-Maske zeigen
+  if (!session) {
+    authSection?.classList.remove("hidden");
+    appSection?.classList.add("hidden");
     resultsSection?.classList.add("hidden");
 
-    logoutBtn?.classList.remove("hidden");
-    entryViewBtn?.classList.remove("hidden");
-    resultsViewBtn?.classList.remove("hidden");
+    logoutBtn?.classList.add("hidden");
+    entryViewBtn?.classList.add("hidden");
+    resultsViewBtn?.classList.add("hidden");
 
-    if (userLabel) userLabel.textContent = session.user.email || "Angemeldet";
+    if (userLabel) userLabel.textContent = "Nicht angemeldet";
+    return;
+  }
 
+  // angemeldet → App zeigen
+  authSection?.classList.add("hidden");
+  appSection?.classList.remove("hidden");
+  resultsSection?.classList.add("hidden");
+
+  logoutBtn?.classList.remove("hidden");
+  entryViewBtn?.classList.remove("hidden");
+  resultsViewBtn?.classList.remove("hidden");
+
+  if (userLabel) userLabel.textContent = session.user.email || "Angemeldet";
+
+  // Daten laden (Teams/Config/Spielerlisten)
+  try {
     await refreshAppData();
-    resetIdle();
-  };
+  } catch (e) {
+    setMsg(saveMsg, `Daten laden fehlgeschlagen: ${e.message}`, false);
+  }
+
+  // Idle-Timer resetten (wenn du ihn drin hast)
+  try { resetIdle(); } catch (_) {}
+};
 
   // ---------- Auth ----------
   const signup = async () => {
@@ -322,23 +334,30 @@
   };
 
   const logout = async (auto = false) => {
-    try {
-      await supabase.auth.signOut();
-    } catch (_) {}
+  // UI SOFORT zurücksetzen (darf niemals hängen)
+  authSection?.classList.remove("hidden");
+  appSection?.classList.add("hidden");
+  resultsSection?.classList.add("hidden");
 
-    // UI sauber zurück
-    authSection?.classList.remove("hidden");
-    appSection?.classList.add("hidden");
-    resultsSection?.classList.add("hidden");
+  logoutBtn?.classList.add("hidden");
+  entryViewBtn?.classList.add("hidden");
+  resultsViewBtn?.classList.add("hidden");
 
-    logoutBtn?.classList.add("hidden");
-    entryViewBtn?.classList.add("hidden");
-    resultsViewBtn?.classList.add("hidden");
+  if (userLabel) userLabel.textContent = "Nicht angemeldet";
+  if (password) password.value = "";
+  setMsg(authMsg, auto ? "Automatisch abgemeldet (Inaktivität)." : "Abgemeldet.", true);
 
-    if (userLabel) userLabel.textContent = "Nicht angemeldet";
-    if (password) password.value = "";
-    setMsg(authMsg, auto ? "Automatisch abgemeldet (Inaktivität)." : "Abgemeldet.", true);
-  };
+  // Supabase signOut: best effort (darf UI nicht blockieren)
+  try {
+    await Promise.race([
+      supabase.auth.signOut(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("signOut timeout")), 1500))
+    ]);
+  } catch (_) {}
+
+  // final: Session-UI neu ziehen
+  try { await setSessionUI(); } catch (_) {}
+};
 
   // ---------- Save ----------
   const saveEntry = async () => {
