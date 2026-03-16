@@ -347,28 +347,29 @@ const clearSupabaseAuth = () => {
   };
 
   const login = async () => {
-    try {
-      setMsg(authMsg, "Anmeldung läuft…", true);
-      loginBtn.disabled = true;
-      loginBtn.textContent = "Lädt…";
+  try {
+    setMsg(authMsg, "Anmeldung läuft…", true);
+    loginBtn.disabled = true;
+    loginBtn.textContent = "Lädt…";
 
-      const em = (email?.value || "").trim();
-      const pw = password?.value || "";
+    const em = (email?.value || "").trim();
+    const pw = password?.value || "";
 
-      if (!em) return setMsg(authMsg, "E-Mail fehlt.", false);
-      if (!pw) return setMsg(authMsg, "Passwort fehlt.", false);
+    if (!em) return setMsg(authMsg, "E-Mail fehlt.", false);
+    if (!pw) return setMsg(authMsg, "Passwort fehlt.", false);
 
-      const { error } = await supabase.auth.signInWithPassword({ email: em, password: pw });
-      if (error) return setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false);
+    // WICHTIG: Altlasten aus vorherigem Login/Logout entfernen
+    clearSupabaseAuth();
 
-      setMsg(authMsg, "Angemeldet.", true);
-      await setSessionUI();
-    } finally {
-      loginBtn.disabled = false;
-      loginBtn.textContent = "Anmelden";
-    }
-  };
+    const { error } = await supabase.auth.signInWithPassword({ email: em, password: pw });
+    if (error) return setMsg(authMsg, error.message || "Anmeldung fehlgeschlagen.", false);
 
+    await setSessionUI();
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.textContent = "Anmelden";
+  }
+};
   const logout = async (auto = false) => {
   // UI sofort zurück
   authSection?.classList.remove("hidden");
