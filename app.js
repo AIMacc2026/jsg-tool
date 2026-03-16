@@ -371,7 +371,7 @@ const clearSupabaseAuth = () => {
   }
 };
   const logout = async (auto = false) => {
-  // UI sofort zurück
+  // UI sofort zurück (damit der Klick sofort "wirkt")
   authSection?.classList.remove("hidden");
   appSection?.classList.add("hidden");
   resultsSection?.classList.add("hidden");
@@ -384,7 +384,7 @@ const clearSupabaseAuth = () => {
   if (password) password.value = "";
   setMsg(authMsg, auto ? "Automatisch abgemeldet (Inaktivität)." : "Abgemeldet.", true);
 
-  // Supabase signOut (best effort)
+  // best effort signOut (darf nicht hängen)
   try {
     await Promise.race([
       supabase.auth.signOut(),
@@ -392,11 +392,11 @@ const clearSupabaseAuth = () => {
     ]);
   } catch (_) {}
 
-  // DAS ist der Fix: gezielt Supabase-Auth Keys entfernen
-  clearSupabaseAuth();
+  // falls vorhanden: Supabase-Auth-Reste löschen (macht es robuster)
+  try { clearSupabaseAuth(); } catch (_) {}
 
-  // final sync
-  try { await setSessionUI(); } catch (_) {}
+  // HIER ist der Fix: harter Reload, damit der Auth-Client garantiert sauber ist
+  location.reload();
 };
 
   // ---------- Save ----------
