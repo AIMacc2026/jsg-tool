@@ -396,7 +396,11 @@ const clearSupabaseAuth = () => {
   try { clearSupabaseAuth(); } catch (_) {}
 
   // HIER ist der Fix: harter Reload, damit der Auth-Client garantiert sauber ist
+  if (!auto) {
   location.reload();
+} else {
+  try { await setSessionUI(); } catch (_) {}
+}
 };
 
   // ---------- Save ----------
