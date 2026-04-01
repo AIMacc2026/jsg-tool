@@ -529,11 +529,20 @@ const clearSupabaseAuth = () => {
     const startISO = toISO(startDateMonthsBack(months));
 
     let q = supabase
-      .from("training_entries")
-      .select("trainingsdatum, player_id, anwesenheit, abgemeldet, auffaelligkeit, grund_id")
-      .eq("team_id", team_id)
-      .gte("trainingsdatum", startISO)
-      .order("trainingsdatum", { ascending: true });
+  .from("training_entries")
+  .select(`
+    trainingsdatum,
+    player_id,
+    anwesenheit,
+    abgemeldet,
+    auffaelligkeit,
+    grund_id,
+    trainingstyp_id,
+    trainingstyp:config_trainingstypen!training_entries_trainingstyp_id_fkey(wert)
+  `)
+  .eq("team_id", team_id)
+  .gte("trainingsdatum", startISO)
+  .order("trainingsdatum", { ascending: true });
 
     if (player_id) q = q.eq("player_id", player_id);
 
@@ -594,20 +603,35 @@ const clearSupabaseAuth = () => {
       `Negativ: ${sumNeg} (${pct(sumNeg, denom)})`,
     ].join(" · "), true);
 
-    const reasonIds = Object.keys(reasonCounts);
-    if (!reasonIds.length) {
-      if (reasonsList) reasonsList.textContent = "Keine Gründe im Zeitraum erfasst.";
-    } else {
-      const rr = await supabase.from("config_gruende").select("id,wert").in("id", reasonIds);
-      const nameMap = {};
-      if (!rr.error) (rr.data||[]).forEach(x => nameMap[x.id] = x.wert);
+    const typeCounts = {};
+rows.forEach((r) => {
+  const typeName = r.trainingstyp?.wert || "Unbekannt";
+  typeCounts[typeName] = (typeCounts[typeName] || 0) + 1;
+});
 
-      if (reasonsList) reasonsList.textContent = reasonIds
-        .map(id => ({ name: nameMap[id] || id, n: reasonCounts[id] }))
-        .sort((a,b)=>b.n-a.n)
-        .map(x => `${x.name}: ${x.n}`)
-        .join(" · ");
-    }
+const typeText = Object.entries(typeCounts)
+  .sort((a, b) => b[1] - a[1])
+  .map(([name, n]) => `${name}: ${n}`)
+  .join(" · ");
+
+const reasonIds = Object.keys(reasonCounts);
+let reasonsText = "Keine Gründe im Zeitraum erfasst.";
+
+if (reasonIds.length) {
+  const rr = await supabase.from("config_gruende").select("id,wert").in("id", reasonIds);
+  const nameMap = {};
+  if (!rr.error) (rr.data || []).forEach(x => nameMap[x.id] = x.wert);
+
+  reasonsText = reasonIds
+    .map(id => ({ name: nameMap[id] || id, n: reasonCounts[id] }))
+    .sort((a, b) => b.n - a.n)
+    .map(x => `${x.name}: ${x.n}`)
+    .join(" · ");
+}
+
+if (reasonsList) {
+  reasonsList.textContent = `Trainingstypen: ${typeText || "Keine"} | Gründe: ${reasonsText}`;
+}
 
     if (chartAttendance) drawLine(chartAttendance.getContext("2d"), labels, sPresent, sAbsent, "Anwesend", "Fehlend");
     if (chartFlags) drawLine(chartFlags.getContext("2d"), labels, sPos, sNeg, "Positiv", "Negativ");
